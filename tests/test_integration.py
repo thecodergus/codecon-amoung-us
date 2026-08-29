@@ -15,7 +15,7 @@ from codecon_amoung_us.config import PROTOCOL_VERSION, GameConfig
 from codecon_amoung_us.game.model import Phase, Role, Team
 from codecon_amoung_us.map.model import GameMap
 from codecon_amoung_us.net.client import SimulatedClient
-from codecon_amoung_us.net.server import GameServer
+from codecon_amoung_us.net.server import COMMAND_QUEUE_MAXSIZE, GameServer
 from codecon_amoung_us.protocol import (
     ActionAccepted,
     ActionDenied,
@@ -1028,3 +1028,40 @@ def test_tie_meeting_ends_without_ejection_and_game_continues(
     snap = four_clients[0].wait_for_snapshot(timeout=5.0)
     assert server._state.phase is Phase.PLAYING
     assert all(any(p.player_id == pid for p in snap.players) for pid in range(4))
+
+
+@pytest.mark.timeout(15)
+def test_command_queue_backpressure_blocks_and_recovers() -> None:
+    """A-07: fila cheia bloqueia o put (backpressure TCP) até a drenagem.
+
+    Servidor sem start (sem game loop drenando) para o teste ser
+    determinístico; a drenagem é simulada com ``get_nowait``.
+    """
+    import threading
+
+    from codecon_amoung_us.net.server import ClientConnection
+
+    srv = GameServer(host="127.0.0.1", port=_free_port(), config=GameConfig())
+    assert srv._commands.maxsize == COMMAND_QUEUE_MAXSIZE
+    sock_a, sock_b = socket.socketpair()
+    conn = ClientConnection(srv, sock_a)
+    msg = JoinRequest(nickname="x", protocol_version=PROTOCOL_VERSION)
+    for _ in range(COMMAND_QUEUE_MAXSIZE):
+        srv._commands.put_nowait((conn, msg))
+    started = threading.Event()
+    done = threading.Event()
+
+    def producer() -> None:
+        started.set()
+        srv.enqueue(conn, msg)  # put bloqueante: deve esperar drenagem
+        done.set()
+
+    thread = threading.Thread(target=producer, daemon=True)
+    thread.start()
+    assert started.wait(2.0)
+    assert not done.wait(0.3)  # fila cheia: produtor permanece bloqueado
+    srv._commands.get_nowait()  # simula a drenagem do game loop
+    assert done.wait(2.0)
+    thread.join(timeout=2.0)
+    sock_a.close()
+    sock_b.close()

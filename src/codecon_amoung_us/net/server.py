@@ -65,6 +65,15 @@ __all__ = ["GameServer", "main"]
 _Command = tuple["ClientConnection", Message]
 _OutboxItem = tuple["ClientConnection | None", Message]
 
+# Teto da fila de comandos: backpressure estrutural (A-07). O ``put`` do
+# recv thread bloqueia quando cheia e o TCP regula o produtor; o game loop
+# drena a fila inteira a cada tick (20Hz), então o bloqueio é ≤ ~1 tick.
+# Medição A-06 (2026-08): flood cru de ~133k msg/s em loopback manteve
+# 20 ticks/s com profundidade ≤ ~1.8k — 50k é ~25x de folga sobre o ponto
+# de equilíbrio observado e ordens de magnitude acima do tráfego legítimo
+# (10 jogadores × 20 inputs/s ≈ 200 msg/s).
+COMMAND_QUEUE_MAXSIZE = 50_000
+
 
 class ClientConnection:
     """Uma conexão TCP: decodifica frames e enfileira comandos no servidor."""
@@ -162,7 +171,7 @@ class GameServer:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._stopped = False
-        self._commands: queue.Queue[_Command] = queue.Queue()
+        self._commands: queue.Queue[_Command] = queue.Queue(maxsize=COMMAND_QUEUE_MAXSIZE)
         self._inputs: dict[int, tuple[float, float]] = {}
         self._conns: list[ClientConnection] = []
         self._connections: dict[int, ClientConnection] = {}
