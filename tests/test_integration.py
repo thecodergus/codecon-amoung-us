@@ -7,6 +7,7 @@ Cada teste usa servidor em porta efêmera, shutdown limpo via fixture e
 from __future__ import annotations
 
 import socket
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -1065,3 +1066,31 @@ def test_command_queue_backpressure_blocks_and_recovers() -> None:
     thread.join(timeout=2.0)
     sock_a.close()
     sock_b.close()
+
+
+@pytest.mark.timeout(20)
+def test_game_loop_survives_tick_exception(
+    server: GameServer,
+    four_clients: list[SimulatedClient],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A-08: exceção num tick é contida e logada; os ticks seguintes continuam."""
+    calls = {"n": 0}
+    original = GameServer._advance_physics
+
+    def boom(self: GameServer, dt: float) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("falha injetada")
+        original(self, dt)
+
+    monkeypatch.setattr(GameServer, "_advance_physics", boom)
+    _start_game(four_clients)
+    tick0 = server._state.tick
+    deadline = time.monotonic() + 5.0
+    while server._state.tick < tick0 + 3 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert server._state.tick >= tick0 + 3
+    assert calls["n"] >= 2  # falhou uma vez e continuou processando
+    assert "erro contido no tick do game loop" in caplog.text

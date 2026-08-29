@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import logging
 import math
 import queue
 import random
@@ -73,6 +74,8 @@ _OutboxItem = tuple["ClientConnection | None", Message]
 # de equilíbrio observado e ordens de magnitude acima do tráfego legítimo
 # (10 jogadores × 20 inputs/s ≈ 200 msg/s).
 COMMAND_QUEUE_MAXSIZE = 50_000
+
+_log = logging.getLogger(__name__)
 
 
 class ClientConnection:
@@ -256,15 +259,24 @@ class GameServer:
             last = now
             outbox: list[_OutboxItem] = []
             snapshot: WorldSnapshot | None = None
-            with self._lock:
-                self._drain_commands(outbox)
-                if self._state.phase is Phase.PLAYING:
-                    self._advance_physics(dt)
-                    self._check_win(outbox)
-                elif self._state.phase is Phase.MEETING and self._state.meeting is not None:
-                    self._check_meeting_timeout(now, outbox)
-                if self._state.phase is Phase.PLAYING:
-                    snapshot = self._build_snapshot()
+            try:
+                with self._lock:
+                    self._drain_commands(outbox)
+                    if self._state.phase is Phase.PLAYING:
+                        self._advance_physics(dt)
+                        self._check_win(outbox)
+                    elif self._state.phase is Phase.MEETING and self._state.meeting is not None:
+                        self._check_meeting_timeout(now, outbox)
+                    if self._state.phase is Phase.PLAYING:
+                        snapshot = self._build_snapshot()
+            except Exception:
+                # Contenção (A-08): um tick defeituoso não derruba o loop nem
+                # encerra as conexões; o lock é liberado pelo with e o tick
+                # seguinte parte do último estado íntegro.
+                _log.exception("erro contido no tick do game loop")
+            # Flush fora do try: mensagens produzidas antes da falha (ex.:
+            # StartGame no tick de início) são entregues mesmo assim; send
+            # suprime OSError por conexão, então o flush não relança.
             self._flush(outbox)
             if snapshot is not None:
                 self._broadcast(snapshot)
