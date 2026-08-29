@@ -9,7 +9,9 @@ ação. Não abre janela real (SDL_VIDEODRIVER=dummy).
 from __future__ import annotations
 
 import os
+import queue
 import socket
+import threading
 import time
 from collections.abc import Iterator
 
@@ -31,7 +33,7 @@ from codecon_amoung_us.protocol import (
     MeetingStarted,
     ProtocolError,
 )
-from codecon_amoung_us.ui.app import App, ConnectionState, _movement_direction
+from codecon_amoung_us.ui.app import App, ConnectionFailure, ConnectionState, _movement_direction
 from codecon_amoung_us.ui.components import Button
 from codecon_amoung_us.ui.viewmodel import VoteUiState
 
@@ -589,3 +591,54 @@ def test_vote_requires_selecting_state(app: App, monkeypatch: pytest.MonkeyPatch
     app.client = client
     app._cast_vote(1)
     assert sent == []  # em SUBMITTING não envia de novo
+
+
+# ------------------------------------------------- cancelamento de conexão
+
+
+def test_cancel_connect_host_releases_port(app: App) -> None:
+    """Cancel ativo antes do connect: worker para o servidor e não publica."""
+    attempt_queue: queue.SimpleQueue[object] = queue.SimpleQueue()
+    cancel = threading.Event()
+    cancel.set()
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    app._connect_worker("host", "127.0.0.1", port, True, attempt_queue, cancel)
+    assert attempt_queue.empty()
+    # porta liberada: um novo servidor sobe na mesma porta sem EADDRINUSE
+    server = GameServer(host="127.0.0.1", port=port)
+    server.start()
+    server.stop()
+
+
+def test_cancel_after_connect_closes_client_and_publishes_nothing(
+    app: App, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sucesso tardio com cancel ativo: fecha o cliente e não publica."""
+    closed: list[bool] = []
+    cancel = threading.Event()
+
+    class StubClient:
+        def connect(self, host: str, port: int, nickname: str, timeout: float = 5.0) -> None:
+            cancel.set()
+
+        def close(self) -> None:
+            closed.append(True)
+
+    monkeypatch.setattr("codecon_amoung_us.ui.app.SimulatedClient", StubClient)
+    attempt_queue: queue.SimpleQueue[object] = queue.SimpleQueue()
+    app._connect_worker("nick", "127.0.0.1", 1, False, attempt_queue, cancel)
+    assert closed == [True]
+    assert attempt_queue.empty()
+
+
+def test_poll_ignores_result_after_cancel(app: App) -> None:
+    """Resultado que chega após o cancel não altera o estado (fila órfã)."""
+    app.connection_state = ConnectionState.CONNECTING
+    app._connection_queue = queue.SimpleQueue()
+    app._connection_cancel = threading.Event()
+    app._cancel_connecting()
+    app._connection_queue.put(ConnectionFailure(message="tarde"))
+    app._poll_connection()
+    assert app.connection_state is ConnectionState.IDLE

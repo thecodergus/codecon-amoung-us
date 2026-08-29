@@ -250,6 +250,7 @@ class App:
         self.connection_state = ConnectionState.IDLE
         self._connection_queue: queue.SimpleQueue[object] = queue.SimpleQueue()
         self._connection_thread: threading.Thread | None = None
+        self._connection_cancel: threading.Event | None = None
 
         self._theme = _menu_theme()
         self.menu_main = self._build_main_menu()
@@ -365,17 +366,34 @@ class App:
         self.connection_state = ConnectionState.CONNECTING
         self.screen_name = "connecting"
         self._current_menu = None
+        # Fila e evento por tentativa: resultados de tentativas canceladas caem
+        # numa fila órfã (nunca lidos) e o worker faz o próprio teardown.
         self._connection_queue = queue.SimpleQueue()
+        self._connection_cancel = threading.Event()
         self._connection_thread = threading.Thread(
             target=self._connect_worker,
-            args=(nickname, ip, port, host),
+            args=(nickname, ip, port, host, self._connection_queue, self._connection_cancel),
             name="connect-worker",
             daemon=True,
         )
         self._connection_thread.start()
 
-    def _connect_worker(self, nickname: str, ip: str, port: int, host: bool) -> None:
-        """Worker: sobe servidor (se host), conecta e publica o resultado."""
+    def _connect_worker(
+        self,
+        nickname: str,
+        ip: str,
+        port: int,
+        host: bool,
+        attempt_queue: queue.SimpleQueue[object],
+        cancel: threading.Event,
+    ) -> None:
+        """Worker: sobe servidor (se host), conecta e publica o resultado.
+
+        Cancelamento cooperativo (``threading.Event``, docs.python.org): o
+        evento não interrompe o ``connect`` bloqueante, mas é verificado após
+        cada etapa; em sucesso tardio o próprio worker desfaz cliente e
+        servidor, sem vazar porta nem registrar cliente fantasma.
+        """
         server: GameServer | None = None
         client = SimulatedClient()
         try:
@@ -384,12 +402,20 @@ class App:
                 server.start()
                 port = server.port
                 ip = "127.0.0.1"
+                if cancel.is_set():
+                    server.stop()
+                    return
             client.connect(ip, port, nickname, timeout=5.0)
-            self._connection_queue.put(ConnectionSuccess(client=client, server=server))
+            if cancel.is_set():
+                client.close()
+                if server is not None:
+                    server.stop()
+                return
+            attempt_queue.put(ConnectionSuccess(client=client, server=server))
         except (OSError, TimeoutError) as exc:
             if server is not None:
                 server.stop()
-            self._connection_queue.put(ConnectionFailure(message=str(exc)))
+            attempt_queue.put(ConnectionFailure(message=str(exc)))
 
     def _poll_connection(self) -> None:
         """Consome o resultado do worker na thread gráfica (main loop)."""
@@ -410,7 +436,14 @@ class App:
             self._show_error(f"Não foi possível conectar: {result.message}")
 
     def _cancel_connecting(self) -> None:
-        """Cancela a conexão em andamento e volta ao menu principal."""
+        """Cancela a conexão em andamento e volta ao menu principal.
+
+        Sinaliza o evento cooperativo: o worker descarta sucesso tardio e faz
+        teardown de cliente/servidor; o resultado (se houver) cai na fila órfã
+        da tentativa, que ``_poll_connection`` não lê mais.
+        """
+        if self._connection_cancel is not None:
+            self._connection_cancel.set()
         if self._connection_thread is not None:
             self._connection_thread = None
         self.connection_state = ConnectionState.IDLE
