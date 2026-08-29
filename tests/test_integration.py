@@ -745,7 +745,9 @@ def test_bad_version_rejected_direct(server: GameServer) -> None:
     from codecon_amoung_us.net.server import ClientConnection
     from codecon_amoung_us.protocol import Message
 
-    sock_a, sock_b = _socket.socketpair(_socket.AF_INET, _socket.SOCK_STREAM)
+    # Família padrão (AF_UNIX onde disponível, senão AF_INET): portátil
+    # Linux/macOS/Windows (docs.python.org/3/library/socket.html#socket.socketpair).
+    sock_a, sock_b = _socket.socketpair()
     conn = ClientConnection(server, sock_a)
     outbox: list[tuple[ClientConnection | None, Message]] = []
     server._on_join(conn, JoinRequest(nickname="x", protocol_version=0), outbox)
