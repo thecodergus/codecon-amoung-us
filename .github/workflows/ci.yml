@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv + Python 3.13
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Sync dependências
+        run: uv sync --frozen
+
+      - name: Ruff (lint)
+        run: uv run ruff check .
+
+      - name: Ruff (format)
+        run: uv run ruff format --check .
+
+      - name: mypy strict
+        run: uv run mypy .
+
+      - name: pytest
+        run: uv run pytest
+        env:
+          SDL_VIDEODRIVER: dummy
+
+      - name: smoke multiplayer E2E
+        run: uv run python scripts/smoke_multiplayer.py
+
+      - name: uv audit (informativo)
+        run: uv audit
+        continue-on-error: true
