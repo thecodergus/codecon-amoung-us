@@ -63,13 +63,16 @@ from .render import (
     Renderer,
 )
 from .sprites import color_for
-from .theme import settings_from_env
+from .theme import TOKENS, settings_from_env
 from .viewmodel import (
+    VOTING_CARDS_PER_PAGE,
     VoteUiState,
     derive_game_hud,
     derive_interaction_context,
     derive_report_target,
     derive_task_markers,
+    gameover_layout,
+    voting_layout,
 )
 
 __all__ = ["App", "main"]
@@ -223,6 +226,8 @@ class App:
         self._meeting_started_at = 0.0
         self.vote_ui_state = VoteUiState.SELECTING
         self.selected_vote_target: int | None = None
+        self._voting_page = 0
+        self._voting_cursor = 0
         self.game_over: GameOver | None = None
         self.last_snapshot: WorldSnapshot | None = None
         self._nicknames: dict[int, str] = {}
@@ -501,6 +506,8 @@ class App:
             self.meeting = message
             self.vote_ui_state = VoteUiState.SELECTING
             self.selected_vote_target = None
+            self._voting_page = 0
+            self._voting_cursor = 0
             self._meeting_started_at = time.monotonic()
             self.screen_name = "voting"
         elif isinstance(message, MeetingEnded):
@@ -893,15 +900,17 @@ class App:
             f"Motivo: {reason}   |   Votação encerra em {remaining}s", True, COLOR_TEXT_DIM
         )
         self.screen.blit(subtitle, subtitle.get_rect(center=(panel.centerx, panel.y + 76)))
-        buttons: list[Button] = []
-        y = panel.y + 108
+        layout = voting_layout(len(self.meeting.voters), self._voting_page)
+        self._voting_page = layout.page
+        first = layout.page * VOTING_CARDS_PER_PAGE
+        visible_ids = self.meeting.voters[first : first + len(layout.cards)]
+        max_cursor = len(visible_ids) + 1  # cards + PULAR + VOTAR
+        self._voting_cursor = min(self._voting_cursor, max_cursor)
+        selecting = self.vote_ui_state is VoteUiState.SELECTING
         card_hit: list[tuple[pygame.Rect, int]] = []
-        for player_id in self.meeting.voters:
-            card_rect = pygame.Rect(panel.x + 36, y, panel.width - 72, 74)
-            if (
-                self.vote_ui_state is VoteUiState.SELECTING
-                and player_id == self.selected_vote_target
-            ):
+        for row, player_id in enumerate(visible_ids):
+            card_rect = pygame.Rect(layout.cards[row])
+            if selecting and player_id == self.selected_vote_target:
                 state = PlayerCardState.SELECTED
             elif self.vote_ui_state is VoteUiState.SUBMITTED:
                 state = PlayerCardState.DISABLED
@@ -916,19 +925,39 @@ class App:
                 font=self.font,
             )
             card.draw(self.screen)
+            if row == self._voting_cursor:
+                ring = card_rect.inflate(6, 6)
+                pygame.draw.rect(self.screen, TOKENS.focus_ring, ring, width=2, border_radius=14)
             card_hit.append((card_rect, player_id))
-            y += 84
+        if layout.page_count > 1:
+            info = self.font.render(
+                f"Página {layout.page + 1}/{layout.page_count} — </> ou roda do mouse",
+                True,
+                COLOR_TEXT_DIM,
+            )
+            self.screen.blit(info, info.get_rect(center=layout.page_info_center))
+        button_state = self._vote_button_state()
+        skip_state = (
+            ButtonState.FOCUSED
+            if self._voting_cursor == len(visible_ids) and button_state is ButtonState.DEFAULT
+            else button_state
+        )
+        vote_state = (
+            ButtonState.FOCUSED
+            if self._voting_cursor == max_cursor and button_state is ButtonState.DEFAULT
+            else button_state
+        )
         skip_button = Button(
-            (panel.centerx - 210, y + 4, 200, 46),
+            layout.skip_button,
             "PULAR",
             lambda: self._cast_vote(None),
-            state=self._vote_button_state(),
+            state=skip_state,
         )
         vote_button = Button(
-            (panel.centerx + 10, y + 4, 200, 46),
+            layout.vote_button,
             "VOTAR",
             lambda: self._cast_vote(self.selected_vote_target),
-            state=self._vote_button_state(),
+            state=vote_state,
         )
         buttons = [skip_button, vote_button]
         self.menu_buttons = buttons
@@ -937,22 +966,45 @@ class App:
         # estados de envio/confirmação (sem duplo envio)
         if self.vote_ui_state is VoteUiState.SUBMITTING:
             status = self.font.render("ENVIANDO VOTO…", True, COLOR_TEXT)
-            self.screen.blit(status, status.get_rect(center=(panel.centerx, y + 74)))
+            self.screen.blit(status, status.get_rect(center=layout.status_center))
         elif self.vote_ui_state is VoteUiState.SUBMITTED:
             status = self.font.render("✓ VOTO REGISTRADO", True, COLOR_TASK)
-            self.screen.blit(status, status.get_rect(center=(panel.centerx, y + 74)))
+            self.screen.blit(status, status.get_rect(center=layout.status_center))
         for event in events:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self._exit_to_main()
                 return
-            if (
-                event.type == pygame.MOUSEBUTTONDOWN
-                and event.button == 1
-                and self.vote_ui_state is VoteUiState.SELECTING
-            ):
-                for card_rect, player_id in card_hit:
+            if event.type == pygame.KEYDOWN and selecting:
+                if event.key in (pygame.K_DOWN, pygame.K_TAB) and not (
+                    event.key == pygame.K_TAB and pygame.key.get_mods() & pygame.KMOD_SHIFT
+                ):
+                    self._voting_cursor = (self._voting_cursor + 1) % (max_cursor + 1)
+                elif event.key == pygame.K_UP or (
+                    event.key == pygame.K_TAB and pygame.key.get_mods() & pygame.KMOD_SHIFT
+                ):
+                    self._voting_cursor = (self._voting_cursor - 1) % (max_cursor + 1)
+                elif event.key in (pygame.K_LEFT, pygame.K_PAGEUP):
+                    self._voting_page = max(0, self._voting_page - 1)
+                    self._voting_cursor = 0
+                elif event.key in (pygame.K_RIGHT, pygame.K_PAGEDOWN):
+                    self._voting_page = min(layout.page_count - 1, self._voting_page + 1)
+                    self._voting_cursor = 0
+                elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    if self._voting_cursor < len(visible_ids):
+                        self.selected_vote_target = visible_ids[self._voting_cursor]
+                    elif self._voting_cursor == len(visible_ids):
+                        self._cast_vote(None)
+                    else:
+                        self._cast_vote(self.selected_vote_target)
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):
+                delta = -1 if event.button == 4 else 1
+                self._voting_page = min(layout.page_count - 1, max(0, self._voting_page + delta))
+                self._voting_cursor = 0
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and selecting:
+                for row, (card_rect, player_id) in enumerate(card_hit):
                     if card_rect.collidepoint(event.pos):
                         self.selected_vote_target = player_id
+                        self._voting_cursor = row
                         break
             for button in buttons:
                 button.handle_event(event)
@@ -1053,8 +1105,11 @@ class App:
         panel.center = (WINDOW_W // 2, 400)
         pygame.draw.rect(self.screen, COLOR_PANEL, panel, border_radius=16)
         pygame.draw.rect(self.screen, COLOR_PANEL_BORDER, panel, width=2, border_radius=16)
-        for row, (player_id, role) in enumerate(sorted(self.game_over.roles.items())):
-            card_rect = pygame.Rect(panel.x + 40, panel.y + 32 + row * 76, 740, 64)
+        layout = gameover_layout(len(self.game_over.roles))
+        for card_rect_tuple, (player_id, role) in zip(
+            layout.cards, sorted(self.game_over.roles.items()), strict=True
+        ):
+            card_rect = pygame.Rect(card_rect_tuple)
             if role is Role.IMPOSTOR:
                 state = (
                     PlayerCardState.WINNER
@@ -1081,13 +1136,13 @@ class App:
             )
             card.draw(self.screen)
         back = Button(
-            (WINDOW_W // 2 - 120, panel.bottom + 24, 240, 48),
+            layout.back_button,
             "VOLTAR AO MENU",
             self._exit_to_main,
         )
         back.draw(self.screen)
         hint = self.font.render("ESC também volta ao menu", True, COLOR_TEXT_DIM)
-        self.screen.blit(hint, hint.get_rect(center=(WINDOW_W // 2, panel.bottom + 84)))
+        self.screen.blit(hint, hint.get_rect(center=layout.hint_center))
         keys = pygame.key.get_pressed()
         if keys[pygame.K_ESCAPE]:
             self._exit_to_main()

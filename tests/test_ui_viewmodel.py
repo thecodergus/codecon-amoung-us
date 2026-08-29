@@ -26,6 +26,9 @@ from codecon_amoung_us.ui.viewmodel import (
     derive_kill_action,
     derive_report_target,
     derive_task_markers,
+    gameover_layout,
+    voting_layout,
+    voting_page_count,
 )
 
 # mapa de teste: 10x8 tiles de 64px, duas tarefas e botão de emergência
@@ -315,3 +318,68 @@ def test_hud_spectator_has_no_actions() -> None:
     assert hud.spectator
     assert hud.primary_action is None
     assert hud.role_label == "ESPECTADOR"
+
+
+# ------------------------------------------------------- layouts de telas
+
+WINDOW = (1280, 768)
+
+
+def _rects_within(
+    rects: tuple[tuple[int, int, int, int], ...], bounds: tuple[int, int, int, int]
+) -> bool:
+    bx, by, bw, bh = bounds
+    return all(
+        bx <= x and by <= y and x + w <= bx + bw and y + h <= by + bh for x, y, w, h in rects
+    )
+
+
+def test_voting_layout_footer_fixo_para_qualquer_n() -> None:
+    """Rodapé (PULAR/VOTAR) permanece dentro do painel para 4, 7, 8 e 10 votantes."""
+    for n_voters in (4, 7, 8, 10):
+        for page in range(voting_page_count(n_voters)):
+            layout = voting_layout(n_voters, page, WINDOW)
+            assert _rects_within((layout.skip_button, layout.vote_button), layout.panel)
+            assert _rects_within((layout.skip_button, layout.vote_button), (0, 0, *WINDOW))
+            assert _rects_within(layout.cards, layout.panel)
+
+
+def test_voting_layout_paginacao() -> None:
+    assert voting_page_count(4) == 1
+    assert voting_page_count(5) == 1
+    assert voting_page_count(6) == 2
+    assert voting_page_count(10) == 2
+    assert len(voting_layout(10, 0, WINDOW).cards) == 5
+    assert len(voting_layout(10, 1, WINDOW).cards) == 5
+    assert len(voting_layout(7, 1, WINDOW).cards) == 2
+    # página fora da faixa é clampada, nunca gera geometria inválida
+    clamped = voting_layout(6, 99, WINDOW)
+    assert clamped.page == 1
+    assert len(clamped.cards) == 1
+
+
+def test_voting_layout_sem_sobreposicao_cards_rodape() -> None:
+    for n_voters in (5, 10):
+        for page in range(voting_page_count(n_voters)):
+            layout = voting_layout(n_voters, page, WINDOW)
+            for card in layout.cards:
+                assert card[1] + card[3] <= layout.skip_button[1]
+
+
+def test_gameover_layout_ate_5_jogadores_coluna_unica() -> None:
+    layout = gameover_layout(5, WINDOW)
+    assert len(layout.cards) == 5
+    assert len({card[0] for card in layout.cards}) == 1
+    assert _rects_within(layout.cards, layout.panel)
+    assert _rects_within((layout.back_button,), (0, 0, *WINDOW))
+
+
+def test_gameover_layout_8_e_10_jogadores_duas_colunas_dentro_da_janela() -> None:
+    for n_players in (8, 10):
+        layout = gameover_layout(n_players, WINDOW)
+        assert len(layout.cards) == n_players
+        assert len({card[0] for card in layout.cards}) == 2
+        assert _rects_within(layout.cards, layout.panel)
+        assert _rects_within(layout.cards, (0, 0, *WINDOW))
+        assert _rects_within((layout.back_button,), (0, 0, *WINDOW))
+        assert layout.hint_center[1] < WINDOW[1]

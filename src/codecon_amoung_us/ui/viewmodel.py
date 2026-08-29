@@ -30,6 +30,11 @@ __all__ = [
     "GameHudView",
     "derive_game_hud",
     "VoteUiState",
+    "VotingLayout",
+    "voting_page_count",
+    "voting_layout",
+    "GameOverLayout",
+    "gameover_layout",
 ]
 
 
@@ -321,3 +326,123 @@ def _derive_interact(
     if context.kind is ActionKind.EMERGENCY:
         return HudAction("E", "REUNIÃO")
     return None
+
+
+# ------------------------------------------------------------------ telas
+
+# Geometria das telas de votação e de fim de jogo, em coordenadas lógicas e
+# sem dependência de pygame: funções puras, testáveis headless. O painel e o
+# rodapé são fixos; a lista de jogadores é paginada/colunada para nunca
+# exceder a janela lógica (o servidor aceita até 10 jogadores).
+
+VOTING_CARDS_PER_PAGE = 5
+VOTING_CARD_HEIGHT = 74
+VOTING_CARD_GAP = 10
+
+GAMEOVER_ROWS_PER_COLUMN = 5
+GAMEOVER_CARD_HEIGHT = 64
+GAMEOVER_CARD_GAP = 12
+GAMEOVER_COLUMN_GAP = 24
+
+RectTuple = tuple[int, int, int, int]
+
+
+@dataclass(frozen=True)
+class VotingLayout:
+    """Geometria resolvida da tela de votação para uma página."""
+
+    panel: RectTuple
+    cards: tuple[RectTuple, ...]
+    skip_button: RectTuple
+    vote_button: RectTuple
+    status_center: tuple[int, int]
+    page_info_center: tuple[int, int]
+    page: int
+    page_count: int
+
+
+def voting_page_count(n_voters: int) -> int:
+    """Número de páginas de cards (mínimo 1)."""
+    return max(1, math.ceil(max(0, n_voters) / VOTING_CARDS_PER_PAGE))
+
+
+def voting_layout(n_voters: int, page: int, window: tuple[int, int] = (1280, 768)) -> VotingLayout:
+    """Layout paginado da votação: cards da página + rodapé fixo no painel.
+
+    O rodapé (PULAR/VOTAR) tem posição fixa no painel, portanto permanece
+    dentro da janela lógica para qualquer ``n_voters`` suportado.
+    """
+    win_w, win_h = window
+    panel_w, panel_h = 620, 640
+    panel_x, panel_y = (win_w - panel_w) // 2, (win_h - panel_h) // 2
+    page_count = voting_page_count(n_voters)
+    page = min(max(0, page), page_count - 1)
+    visible = min(VOTING_CARDS_PER_PAGE, max(0, n_voters - page * VOTING_CARDS_PER_PAGE))
+    cards = tuple(
+        (
+            panel_x + 36,
+            panel_y + 104 + row * (VOTING_CARD_HEIGHT + VOTING_CARD_GAP),
+            panel_w - 72,
+            VOTING_CARD_HEIGHT,
+        )
+        for row in range(visible)
+    )
+    footer_y = panel_y + panel_h - 64
+    center_x = panel_x + panel_w // 2
+    return VotingLayout(
+        panel=(panel_x, panel_y, panel_w, panel_h),
+        cards=cards,
+        skip_button=(center_x - 210, footer_y, 200, 46),
+        vote_button=(center_x + 10, footer_y, 200, 46),
+        status_center=(center_x, footer_y - 28),
+        page_info_center=(center_x, panel_y + 530),
+        page=page,
+        page_count=page_count,
+    )
+
+
+@dataclass(frozen=True)
+class GameOverLayout:
+    """Geometria resolvida da tela de fim de jogo."""
+
+    panel: RectTuple
+    cards: tuple[RectTuple, ...]
+    back_button: RectTuple
+    hint_center: tuple[int, int]
+
+
+def gameover_layout(n_players: int, window: tuple[int, int] = (1280, 768)) -> GameOverLayout:
+    """Layout da tela de fim de jogo: 1 coluna até 5 jogadores, 2 colunas acima.
+
+    Com 2 colunas de 5 linhas cabem os 10 jogadores suportados pelo servidor
+    dentro do painel (e da janela lógica).
+    """
+    win_w, _ = window
+    panel_w, panel_h = 820, 440
+    panel_x, panel_y = (win_w - panel_w) // 2, 400 - panel_h // 2
+    n = max(0, n_players)
+    step = GAMEOVER_CARD_HEIGHT + GAMEOVER_CARD_GAP
+    if n <= GAMEOVER_ROWS_PER_COLUMN:
+        col_w = panel_w - 80
+        cards = tuple(
+            (panel_x + 40, panel_y + 32 + row * step, col_w, GAMEOVER_CARD_HEIGHT)
+            for row in range(n)
+        )
+    else:
+        col_w = (panel_w - 80 - GAMEOVER_COLUMN_GAP) // 2
+        cards = tuple(
+            (
+                panel_x + 40 + col * (col_w + GAMEOVER_COLUMN_GAP),
+                panel_y + 32 + row * step,
+                col_w,
+                GAMEOVER_CARD_HEIGHT,
+            )
+            for idx in range(n)
+            for col, row in [(idx // GAMEOVER_ROWS_PER_COLUMN, idx % GAMEOVER_ROWS_PER_COLUMN)]
+        )
+    return GameOverLayout(
+        panel=(panel_x, panel_y, panel_w, panel_h),
+        cards=cards,
+        back_button=(win_w // 2 - 120, panel_y + panel_h + 24, 240, 48),
+        hint_center=(win_w // 2, panel_y + panel_h + 84),
+    )
