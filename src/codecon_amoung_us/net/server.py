@@ -330,21 +330,26 @@ class GameServer:
     def _dispatch(
         self, conn: ClientConnection, message: Message, outbox: list[_OutboxItem]
     ) -> None:
-        handlers: dict[type[Message], object] = {
-            JoinRequest: self._on_join,
-            StartGameRequest: self._on_start_request,
-            MovementInput: self._on_movement,
-            KillRequest: self._on_kill,
-            BodyReported: self._on_report,
-            EmergencyMeetingRequest: self._on_emergency,
-            VoteRequest: self._on_vote,
-            TaskActionRequest: self._on_task,
-        }
-        handler = handlers.get(type(message))
-        if handler is None:
-            return
-        # cast seguro: handler é bound method que aceita (conn, message, outbox)
-        handler(conn, message, outbox)  # type: ignore[operator]
+        # match por tipo: cada branch é tipada estaticamente (sem dict de
+        # handlers nem supressão de tipo) e o custo linear é irrisório no
+        # volume de comandos por tick.
+        match message:
+            case JoinRequest():
+                self._on_join(conn, message, outbox)
+            case StartGameRequest():
+                self._on_start_request(conn, message, outbox)
+            case MovementInput():
+                self._on_movement(conn, message, outbox)
+            case KillRequest():
+                self._on_kill(conn, message, outbox)
+            case BodyReported():
+                self._on_report(conn, message, outbox)
+            case EmergencyMeetingRequest():
+                self._on_emergency(conn, message, outbox)
+            case VoteRequest():
+                self._on_vote(conn, message, outbox)
+            case TaskActionRequest():
+                self._on_task(conn, message, outbox)
 
     def _reject_connection(self, conn: ClientConnection, message: Message) -> None:
         """Envia a rejeição diretamente e fecha a conexão.
@@ -966,12 +971,12 @@ def _server_config(args: argparse.Namespace) -> GameConfig:
         raise ValueError(f"tick-rate deve ser >= 1: {args.tick_rate}")
     if args.max_players is not None and not 1 <= args.max_players <= MAX_PLAYERS:
         raise ValueError(f"max-players deve estar em [1, {MAX_PLAYERS}]: {args.max_players}")
-    kwargs: dict[str, object] = {}
+    config = GameConfig()
     if args.max_players is not None:
-        kwargs["max_players"] = args.max_players
+        config = dataclasses.replace(config, max_players=args.max_players)
     if args.tick_rate is not None:
-        kwargs["tick_rate"] = args.tick_rate
-    return GameConfig(**kwargs)  # type: ignore[arg-type]
+        config = dataclasses.replace(config, tick_rate=args.tick_rate)
+    return config
 
 
 def main(argv: list[str] | None = None) -> None:

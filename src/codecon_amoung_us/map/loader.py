@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import pytiled_parser
 from pytiled_parser import common_types, layer, tiled_object
@@ -32,7 +33,9 @@ def _prop(props: Mapping[str, _PropValue], name: str, default: _PropValue) -> _P
 
 def _as_float(value: _PropValue, name: str) -> float:
     try:
-        return float(value)  # type: ignore[arg-type]
+        # cast estático: o conjunto coercível é float|str|bool; Path/Color
+        # caem no TypeError/ValueError abaixo em runtime.
+        return float(cast("float | str | bool", value))
     except (TypeError, ValueError) as exc:
         raise MapError(f"propriedade '{name}' deveria ser numérica, obtido: {value!r}") from exc
 
