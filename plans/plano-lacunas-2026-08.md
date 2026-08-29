@@ -1,5 +1,13 @@
 # Plano de implementação — lacunas pós-auditoria (2026-08-29)
 
+> **Status: EXECUTADO (2026-08-29).** A-01…A-11 implementadas e commitadas
+> (1a5dc05..7c47553); A-12 documentada em `checklist-ambiente-real.md`
+> (G-13 permanece bloqueado por hardware). Desvio material: A-07 — a
+> medição A-06 mostrou que o consumidor drena ~2 ordens de magnitude acima
+> do produtor; em vez de teto de drenagem + desconexão, adotou-se
+> `queue.Queue(maxsize=50_000)` (backpressure estrutural, sem política de
+> descarte), com limite derivado da medição.
+
 Base: auditoria concluída em 2026-08-29 (6 achados AUD, 1 suspeita, 5 dívidas DT, 1 bloqueio
 ambiental) + pesquisa de estado da arte executada na mesma sessão. Auditorias anteriores
 (G-01..G-29, A-01..A-28 em `lacunas-pos-auditoria.md` / `lacunas-remanescentes.md`) estão
