@@ -536,6 +536,38 @@ def test_voting_majority_ejection_is_secret_over_the_wire(
 
 
 @pytest.mark.timeout(40)
+def test_ejected_player_is_dead_in_next_snapshot_by_design(
+    server: GameServer,
+) -> None:
+    """Contrato do escopo de sigilo (A-05): o fim da reunião não revela QUEM
+    foi ejetado, mas o estado vivo/morto do ejetado é público no snapshot
+    seguinte (alive=False) — decisão de design, como no Among Us original.
+
+    Usa 6 jogadores para a partida continuar após a ejeção (com 4, qualquer
+    ejeção encerra o jogo e os snapshots param).
+    """
+    clients = [SimulatedClient() for _ in range(6)]
+    for i, client in enumerate(clients):
+        client.connect("127.0.0.1", server.port, f"player{i}", timeout=5.0)
+    _start_game(clients)
+    impostor, _killed_id, meeting_id = _impostor_kills_and_reports(server, clients)
+    voters = _all_alive_voters(impostor)
+    victim = next(pid for pid in voters if pid != impostor.player_id)
+    for client in clients:
+        if client.player_id in voters:
+            client.vote(meeting_id, victim)
+    observer = next(c for c in clients if c.player_id != victim)
+    observer.wait_for(MeetingEnded, timeout=5.0)
+    snap = observer.wait_for_snapshot(timeout=5.0)
+    while all(p.alive for p in snap.players if p.player_id == victim):
+        snap = observer.wait_for_snapshot(timeout=5.0)
+    ejected = next(p for p in snap.players if p.player_id == victim)
+    assert not ejected.alive
+    for client in clients:
+        client.close()
+
+
+@pytest.mark.timeout(40)
 def test_voting_tie_does_not_eject(server: GameServer, four_clients: list[SimulatedClient]) -> None:
     _start_game(four_clients)
     impostor, _killed, meeting_id = _impostor_kills_and_reports(server, four_clients)

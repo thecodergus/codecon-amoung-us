@@ -226,11 +226,13 @@ class MeetingStarted(MessageBase):
 
 
 class MeetingEnded(MessageBase):
-    """Fim da reunião — sem qualquer informação sobre o resultado.
+    """Fim da reunião — não revela quem foi ejetado nem a contagem de votos.
 
-    O booleano de ejeção foi removido no protocolo v2: ninguém (nem o
-    ejetado) descobre publicamente se houve ejeção; somente o ejetado
-    recebe ``Ejected`` (privado) com identidade e papel.
+    O booleano de ejeção foi removido no protocolo v2: somente o ejetado
+    recebe ``Ejected`` (privado) com identidade e papel. O escopo do sigilo
+    é a identidade/papel no fim da reunião — o estado vivo/morto do ejetado
+    torna-se público no ``WorldSnapshot`` seguinte (``alive=False``), como
+    no Among Us original: é decisão de design, não vazamento.
     """
 
     meeting_id: MessageId

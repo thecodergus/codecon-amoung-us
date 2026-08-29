@@ -19,7 +19,9 @@ def dispatch_ejection(outcome: MeetingOutcome, recipients: list[int]) -> dict[in
 
     - Apenas o ejetado recebe ``Ejected`` (identidade + papel).
     - Todos os destinatários (inclusive o ejetado) recebem ``MeetingEnded``
-      com somente ``meeting_id`` — ninguém descobre se houve ejeção.
+      com somente ``meeting_id`` — a mensagem não revela quem foi ejetado
+      nem se houve ejeção. O estado vivo/morto do ejetado é público no
+      snapshot seguinte (``alive=False``), por decisão de design.
     """
     dispatch: dict[int, list[Message]] = {
         player_id: [MeetingEnded(meeting_id=outcome.meeting_id)] for player_id in recipients
