@@ -1,7 +1,7 @@
 """Aplicação Pygame: menus (pygame-menu), lobby, jogo e votação.
 
 Ponto de entrada ``main()``. Hosting embute o servidor em uma thread no
-mesmo processo (``GameServer``); o cliente de rede é o ``SimulatedClient``.
+mesmo processo (``GameServer``); o cliente de rede é o ``GameClient``.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from ..config import default_assets_dir, default_map_path
 from ..game.model import Role
 from ..map.loader import load_map
 from ..map.model import GameMap
-from ..net.client import SimulatedClient
+from ..net.client import GameClient
 from ..net.server import GameServer
 from ..protocol import (
     ActionAccepted,
@@ -125,7 +125,7 @@ class ConnectionState(StrEnum):
 class ConnectionSuccess:
     """Resultado do worker de conexão: cliente + servidor embutido (se host)."""
 
-    client: SimulatedClient
+    client: GameClient
     server: GameServer | None
 
 
@@ -206,7 +206,7 @@ class App:
         self.font = self.fonts.control
         self.font_big = self.fonts.heading
 
-        self.client: SimulatedClient | None = None
+        self.client: GameClient | None = None
         self.server: GameServer | None = None
         self.game_map: GameMap = load_map(default_map_path())
         self.ui_settings = settings_from_env()
@@ -395,7 +395,7 @@ class App:
         servidor, sem vazar porta nem registrar cliente fantasma.
         """
         server: GameServer | None = None
-        client = SimulatedClient()
+        client = GameClient()
         try:
             if host:
                 server = GameServer(host="127.0.0.1", port=port)

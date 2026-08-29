@@ -32,7 +32,7 @@ from pathlib import Path
 
 from codecon_amoung_us.framing import encode_frame
 from codecon_amoung_us.game.model import Role, Team
-from codecon_amoung_us.net.client import SimulatedClient
+from codecon_amoung_us.net.client import GameClient
 from codecon_amoung_us.protocol import (
     Ejected,
     GameOver,
@@ -73,14 +73,14 @@ def _wait_for_server(port: int, timeout: float = 15.0) -> None:
     raise RuntimeError(f"servidor não aceitou conexão em {timeout}s")
 
 
-def _start_game(clients: list[SimulatedClient]) -> None:
+def _start_game(clients: list[GameClient]) -> None:
     clients[0].start_game()
     for client in clients:
         client.wait_for(StartGame, timeout=10.0)
         client.wait_for(RoleAssigned, timeout=10.0)
 
 
-def _move_to_point(client: SimulatedClient, tx: float, ty: float, timeout: float = 25.0) -> bool:
+def _move_to_point(client: GameClient, tx: float, ty: float, timeout: float = 25.0) -> bool:
     """Move o cliente até um ponto navegando pelo caminho BFS do mapa (lab).
 
     Deriva os waypoints do asset carregado (independe do layout); a última
@@ -186,7 +186,7 @@ def _move_to_point(client: SimulatedClient, tx: float, ty: float, timeout: float
 
 
 def _move_next_to(
-    impostor: SimulatedClient, target_id: int, kill_radius: float, timeout: float = 25.0
+    impostor: GameClient, target_id: int, kill_radius: float, timeout: float = 25.0
 ) -> bool:
     """Move o impostor até o raio de kill do alvo (alvo parado)."""
     deadline = time.monotonic() + timeout
@@ -208,7 +208,7 @@ def _move_next_to(
     return False
 
 
-def _wait_for_body(client: SimulatedClient, timeout: float = 10.0) -> int:
+def _wait_for_body(client: GameClient, timeout: float = 10.0) -> int:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         snap = client.snapshot
@@ -218,7 +218,7 @@ def _wait_for_body(client: SimulatedClient, timeout: float = 10.0) -> int:
     raise RuntimeError("corpo não apareceu no snapshot")
 
 
-def _impostor_kills_and_reports(clients: list[SimulatedClient], kill_radius: float) -> int:
+def _impostor_kills_and_reports(clients: list[GameClient], kill_radius: float) -> int:
     """Mata um tripulante e reporta; retorna o meeting_id."""
     impostor = next(c for c in clients if c.role is Role.IMPOSTOR)
     snap = impostor.wait_for_snapshot(timeout=10.0)
@@ -255,7 +255,7 @@ def _run() -> int:
         print(f"[1/6] servidor standalone em {HOST}:{port} (pid {proc.pid})")
         _wait_for_server(port)
 
-        clients = [SimulatedClient() for _ in range(4)]
+        clients = [GameClient() for _ in range(4)]
         try:
             print("[2/6] conectando 4 clientes no lobby")
             for i, client in enumerate(clients):

@@ -23,16 +23,18 @@ from ..protocol import (
     WorldSnapshot,
 )
 
-__all__ = ["SimulatedClient"]
+__all__ = ["GameClient"]
 
 _M = TypeVar("_M", bound=Message)
 
 
-class SimulatedClient:
+class GameClient:
     """Cliente TCP não-bloqueante: recebe frames em thread própria.
 
-    ``wait_for``/``wait_for_any`` consomem mensagens da fila interna e
-    lançam ``TimeoutError`` se o prazo expirar — nenhum teste fica preso.
+    É o cliente de produção usado pela UI (``ui/app.py``). Os helpers de
+    sincronização (``wait_for``/``wait_for_any``/``peek``/``drain``) existem
+    para testes e smoke: consomem mensagens da fila interna e lançam
+    ``TimeoutError`` se o prazo expirar — nenhum teste fica preso.
     """
 
     def __init__(self) -> None:
@@ -78,7 +80,7 @@ class SimulatedClient:
         if self._recv_thread is not None:
             self._recv_thread.join(timeout=3.0)
 
-    def __enter__(self) -> SimulatedClient:
+    def __enter__(self) -> GameClient:
         return self
 
     def __exit__(self, *exc: object) -> None:

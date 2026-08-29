@@ -92,7 +92,8 @@ src/codecon_amoung_us/
   game/              domínio puro: model, rules, physics, tasks, voting, meeting
   map/               model.py (Rect, SpawnPoint, TaskPoint, GameMap) + loader.py
   net/               server.py (GameServer autoritativo + CLI) + client.py
-                     (SimulatedClient p/ testes e smoke) + dispatch.py (sigilo)
+                     (GameClient: usado pela UI; helpers p/ testes e smoke)
+                     + dispatch.py (sigilo)
   ui/                app.py (App, menus, jogo, votação) + render.py +
                      sprites.py (duckee)
 assets/maps/lab.json      mapa Tiled (20x11, 64px, 1280x704): paredes, spawns,

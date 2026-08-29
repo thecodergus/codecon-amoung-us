@@ -23,7 +23,7 @@ import pygame
 
 from codecon_amoung_us.game.meeting import MeetingReason
 from codecon_amoung_us.game.model import Role
-from codecon_amoung_us.net.client import SimulatedClient
+from codecon_amoung_us.net.client import GameClient
 from codecon_amoung_us.net.server import GameServer
 from codecon_amoung_us.protocol import (
     ActionAccepted,
@@ -96,7 +96,7 @@ def test_escape_in_game_returns_to_main(app: App) -> None:
     # App conectado a um servidor real (como o host faz): ESC derruba tudo.
     server = GameServer(host="127.0.0.1", port=0)
     server.start()
-    client = SimulatedClient()
+    client = GameClient()
     try:
         client.connect("127.0.0.1", server.port, "tester", timeout=5.0)
         app.client = client
@@ -130,7 +130,7 @@ def test_protocol_error_tears_down_connection(app: App) -> None:
     # ProtocolError no meio da sessão encerra client e server embutido.
     server = GameServer(host="127.0.0.1", port=0)
     server.start()
-    client = SimulatedClient()
+    client = GameClient()
     try:
         client.connect("127.0.0.1", server.port, "tester", timeout=5.0)
         app.client = client
@@ -265,7 +265,7 @@ def test_motion_events_also_translated(app: App) -> None:
 
 def test_game_movement_sends_normalized_move(monkeypatch: pytest.MonkeyPatch, app: App) -> None:
     moves: list[tuple[float, float]] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "move", lambda dx, dy: moves.append((dx, dy)))
     monkeypatch.setattr(pygame.key, "get_pressed", lambda: _fake_keys(pygame.K_w))
     app.client = client
@@ -348,7 +348,7 @@ def test_e_key_completes_nearby_assigned_task(monkeypatch: pytest.MonkeyPatch, a
         tasks=[TaskInfo(task_id=point.task_id, task_type=point.task_type, done=False)]
     )
     completed: list[int] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "complete_task", lambda task_id: completed.append(task_id))
     app.client = client
     app._handle_game_key(pygame.K_e)
@@ -369,7 +369,7 @@ def test_e_key_sends_nothing_outside_radius(monkeypatch: pytest.MonkeyPatch, app
         tasks=[TaskInfo(task_id=point.task_id, task_type=point.task_type, done=False)]
     )
     completed: list[int] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "complete_task", lambda task_id: completed.append(task_id))
     monkeypatch.setattr(client, "emergency", lambda: completed.append(-1))
     app.client = client
@@ -390,7 +390,7 @@ def test_e_key_ignored_when_dead(monkeypatch: pytest.MonkeyPatch, app: App) -> N
         tasks=[TaskInfo(task_id=point.task_id, task_type=point.task_type, done=False)]
     )
     calls: list[object] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "complete_task", lambda task_id: calls.append(task_id))
     monkeypatch.setattr(client, "emergency", lambda: calls.append("e"))
     monkeypatch.setattr(client, "report", lambda body_id: calls.append(body_id))
@@ -417,7 +417,7 @@ def test_space_key_sends_kill_to_nearest_alive(monkeypatch: pytest.MonkeyPatch, 
         bodies=[],
     )
     kills: list[int] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "kill", lambda target_id: kills.append(target_id))
     app.client = client
     app._handle_game_key(pygame.K_SPACE)
@@ -527,7 +527,7 @@ def test_vote_selects_card_and_casts(app: App, monkeypatch: pytest.MonkeyPatch) 
     app.meeting = _meeting()
     app.my_id = 0
     sent: list[tuple[int, int | None]] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "vote", lambda mid, target: sent.append((mid, target)))
     app.client = client
     # seleção via clique no card (posição do primeiro card do painel)
@@ -572,7 +572,7 @@ def test_no_double_vote_after_submitted(app: App, monkeypatch: pytest.MonkeyPatc
     app.vote_ui_state = VoteUiState.SUBMITTED
     app.selected_vote_target = 1
     sent: list[tuple[int, int | None]] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "vote", lambda mid, target: sent.append((mid, target)))
     app.client = client
     app._cast_vote(1)
@@ -586,7 +586,7 @@ def test_vote_requires_selecting_state(app: App, monkeypatch: pytest.MonkeyPatch
     app.my_id = 0
     app.vote_ui_state = VoteUiState.SUBMITTING
     sent: list[tuple[int, int | None]] = []
-    client = SimulatedClient()
+    client = GameClient()
     monkeypatch.setattr(client, "vote", lambda mid, target: sent.append((mid, target)))
     app.client = client
     app._cast_vote(1)
@@ -626,7 +626,7 @@ def test_cancel_after_connect_closes_client_and_publishes_nothing(
         def close(self) -> None:
             closed.append(True)
 
-    monkeypatch.setattr("codecon_amoung_us.ui.app.SimulatedClient", StubClient)
+    monkeypatch.setattr("codecon_amoung_us.ui.app.GameClient", StubClient)
     attempt_queue: queue.SimpleQueue[object] = queue.SimpleQueue()
     app._connect_worker("nick", "127.0.0.1", 1, False, attempt_queue, cancel)
     assert closed == [True]

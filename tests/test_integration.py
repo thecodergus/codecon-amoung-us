@@ -15,7 +15,7 @@ import pytest
 from codecon_amoung_us.config import PROTOCOL_VERSION, GameConfig
 from codecon_amoung_us.game.model import Phase, Role, Team
 from codecon_amoung_us.map.model import GameMap
-from codecon_amoung_us.net.client import SimulatedClient
+from codecon_amoung_us.net.client import GameClient
 from codecon_amoung_us.net.server import COMMAND_QUEUE_MAXSIZE, GameServer
 from codecon_amoung_us.protocol import (
     ActionAccepted,
@@ -92,11 +92,11 @@ def server() -> Iterator[GameServer]:
 
 
 @pytest.fixture
-def four_clients(server: GameServer) -> list[SimulatedClient]:
+def four_clients(server: GameServer) -> list[GameClient]:
     """Quatro clientes conectados e aceitos no lobby (sincronizado pelo servidor)."""
     import time as _time
 
-    clients = [SimulatedClient() for _ in range(4)]
+    clients = [GameClient() for _ in range(4)]
     for i, client in enumerate(clients):
         client.connect("127.0.0.1", server.port, f"player{i}", timeout=5.0)
     deadline = _time.monotonic() + 5.0
@@ -107,7 +107,7 @@ def four_clients(server: GameServer) -> list[SimulatedClient]:
 
 
 @pytest.mark.timeout(30)
-def test_four_clients_join_lobby(server: GameServer, four_clients: list[SimulatedClient]) -> None:
+def test_four_clients_join_lobby(server: GameServer, four_clients: list[GameClient]) -> None:
     for client in four_clients:
         assert client.player_id is not None
         assert client.host_player_id is not None
@@ -121,7 +121,7 @@ def test_four_clients_join_lobby(server: GameServer, four_clients: list[Simulate
 
 @pytest.mark.timeout(30)
 def test_start_game_assigns_one_impostor(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     host = four_clients[0]
     host.start_game()
@@ -141,7 +141,7 @@ def test_start_game_assigns_one_impostor(
 
 
 @pytest.mark.timeout(30)
-def test_non_host_cannot_start(server: GameServer, four_clients: list[SimulatedClient]) -> None:
+def test_non_host_cannot_start(server: GameServer, four_clients: list[GameClient]) -> None:
     four_clients[1].start_game()
     denied = four_clients[1].wait_for(ActionDenied, timeout=5.0)
     assert "host" in denied.reason
@@ -156,7 +156,7 @@ def test_solo_host_starts_and_wins_by_tasks(server: GameServer) -> None:
     from codecon_amoung_us.config import default_map_path
     from codecon_amoung_us.map.loader import load_map
 
-    client = SimulatedClient()
+    client = GameClient()
     try:
         client.connect("127.0.0.1", server.port, "solo", timeout=5.0)
         client.start_game()
@@ -182,9 +182,7 @@ def test_solo_host_starts_and_wins_by_tasks(server: GameServer) -> None:
 
 
 @pytest.mark.timeout(30)
-def test_snapshots_flow_after_start(
-    server: GameServer, four_clients: list[SimulatedClient]
-) -> None:
+def test_snapshots_flow_after_start(server: GameServer, four_clients: list[GameClient]) -> None:
     four_clients[0].start_game()
     for client in four_clients:
         client.wait_for(StartGame, timeout=5.0)
@@ -195,9 +193,7 @@ def test_snapshots_flow_after_start(
 
 
 @pytest.mark.timeout(30)
-def test_disconnect_in_lobby_broadcasts(
-    server: GameServer, four_clients: list[SimulatedClient]
-) -> None:
+def test_disconnect_in_lobby_broadcasts(server: GameServer, four_clients: list[GameClient]) -> None:
     leaver = four_clients[2]
     leaver.close()
     # os demais recebem PlayerDisconnected
@@ -208,7 +204,7 @@ def test_disconnect_in_lobby_broadcasts(
 
 @pytest.mark.timeout(30)
 def test_impostor_kill_and_body_in_snapshot(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     four_clients[0].start_game()
     for client in four_clients:
@@ -235,7 +231,7 @@ def test_impostor_kill_and_body_in_snapshot(
 
 @pytest.mark.timeout(30)
 def test_malformed_frame_gets_protocol_error(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     client = four_clients[0]
     # envia payload malformado cru direto no socket
@@ -246,7 +242,7 @@ def test_malformed_frame_gets_protocol_error(
     err = client.wait_for(ProtocolError, timeout=5.0)
     assert err.code == "bad_frame"
     # o servidor segue saudável: um novo cliente ainda conecta e é aceito
-    extra = SimulatedClient()
+    extra = GameClient()
     extra.connect("127.0.0.1", server.port, "late", timeout=5.0)
     extra.close()
 
@@ -328,7 +324,7 @@ def _plan_path(
     return [(cx * tw + tw / 2, cy * th + th / 2) for cx, cy in pruned]
 
 
-def _move_to_point(client: SimulatedClient, tx: float, ty: float, timeout: float = 20.0) -> bool:
+def _move_to_point(client: GameClient, tx: float, ty: float, timeout: float = 20.0) -> bool:
     """Move o cliente até um ponto navegando pelo caminho BFS do mapa.
 
     Deriva os waypoints do asset carregado (independe do layout); a última
@@ -371,7 +367,7 @@ def _move_to_point(client: SimulatedClient, tx: float, ty: float, timeout: float
     return False
 
 
-def _move_next_to(impostor: SimulatedClient, target_id: int, kill_radius: float) -> bool:
+def _move_next_to(impostor: GameClient, target_id: int, kill_radius: float) -> bool:
     """Move o impostor até o raio de kill do alvo.
 
     Rota única via centro da cafeteria + destino (o alvo está parado).
@@ -399,7 +395,7 @@ def _move_next_to(impostor: SimulatedClient, target_id: int, kill_radius: float)
 
 
 @pytest.mark.timeout(30)
-def test_report_triggers_meeting(server: GameServer, four_clients: list[SimulatedClient]) -> None:
+def test_report_triggers_meeting(server: GameServer, four_clients: list[GameClient]) -> None:
     four_clients[0].start_game()
     for client in four_clients:
         client.wait_for(StartGame, timeout=5.0)
@@ -429,7 +425,7 @@ def test_report_triggers_meeting(server: GameServer, four_clients: list[Simulate
 
 @pytest.mark.timeout(30)
 def test_emergency_meeting_requires_proximity(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     import math
 
@@ -459,7 +455,7 @@ def test_emergency_meeting_requires_proximity(
 # ---------------------------------------------------------------------------
 
 
-def _start_game(four_clients: list[SimulatedClient]) -> None:
+def _start_game(four_clients: list[GameClient]) -> None:
     four_clients[0].start_game()
     for client in four_clients:
         client.wait_for(StartGame, timeout=5.0)
@@ -467,8 +463,8 @@ def _start_game(four_clients: list[SimulatedClient]) -> None:
 
 
 def _impostor_kills_and_reports(
-    server: GameServer, four_clients: list[SimulatedClient]
-) -> tuple[SimulatedClient, int, int]:
+    server: GameServer, four_clients: list[GameClient]
+) -> tuple[GameClient, int, int]:
     """Mata um alvo e abre reunião por kill report. Retorna (impostor, alvo, meeting_id)."""
     impostor = next(c for c in four_clients if c.role is Role.IMPOSTOR)
     snap = impostor.wait_for_snapshot(timeout=5.0)
@@ -491,7 +487,7 @@ def _impostor_kills_and_reports(
     return impostor, target.player_id, meeting.meeting_id
 
 
-def _all_alive_voters(impostor: SimulatedClient) -> list[int]:
+def _all_alive_voters(impostor: GameClient) -> list[int]:
     """ids dos votantes elegíveis (vivos) no snapshot mais recente."""
     snap = impostor.snapshot
     assert snap is not None
@@ -500,7 +496,7 @@ def _all_alive_voters(impostor: SimulatedClient) -> list[int]:
 
 @pytest.mark.timeout(40)
 def test_voting_majority_ejection_is_secret_over_the_wire(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     impostor, killed_id, meeting_id = _impostor_kills_and_reports(server, four_clients)
@@ -547,7 +543,7 @@ def test_ejected_player_is_dead_in_next_snapshot_by_design(
     Usa 6 jogadores para a partida continuar após a ejeção (com 4, qualquer
     ejeção encerra o jogo e os snapshots param).
     """
-    clients = [SimulatedClient() for _ in range(6)]
+    clients = [GameClient() for _ in range(6)]
     for i, client in enumerate(clients):
         client.connect("127.0.0.1", server.port, f"player{i}", timeout=5.0)
     _start_game(clients)
@@ -569,7 +565,7 @@ def test_ejected_player_is_dead_in_next_snapshot_by_design(
 
 
 @pytest.mark.timeout(40)
-def test_voting_tie_does_not_eject(server: GameServer, four_clients: list[SimulatedClient]) -> None:
+def test_voting_tie_does_not_eject(server: GameServer, four_clients: list[GameClient]) -> None:
     _start_game(four_clients)
     impostor, _killed, meeting_id = _impostor_kills_and_reports(server, four_clients)
     voters = _all_alive_voters(impostor)
@@ -588,7 +584,7 @@ def test_voting_tie_does_not_eject(server: GameServer, four_clients: list[Simula
 
 @pytest.mark.timeout(40)
 def test_game_over_when_impostor_ejected(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     impostor, _killed, meeting_id = _impostor_kills_and_reports(server, four_clients)
@@ -613,9 +609,7 @@ def test_game_over_when_impostor_ejected(
 
 
 @pytest.mark.timeout(40)
-def test_kill_out_of_range_is_denied(
-    server: GameServer, four_clients: list[SimulatedClient]
-) -> None:
+def test_kill_out_of_range_is_denied(server: GameServer, four_clients: list[GameClient]) -> None:
     _start_game(four_clients)
     impostor = next(c for c in four_clients if c.role is Role.IMPOSTOR)
     snap = impostor.wait_for_snapshot(timeout=5.0)
@@ -640,7 +634,7 @@ def test_kill_out_of_range_is_denied(
 
 @pytest.mark.timeout(40)
 def test_crew_completes_task_and_sees_task_state(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     crew = next(c for c in four_clients if c.role is Role.CREW)
@@ -675,8 +669,8 @@ def test_crew_completes_task_and_sees_task_state(
 
 
 def _impostor_kills_only(
-    server: GameServer, four_clients: list[SimulatedClient]
-) -> tuple[SimulatedClient, int]:
+    server: GameServer, four_clients: list[GameClient]
+) -> tuple[GameClient, int]:
     """Mata um alvo sem abrir reunião. Retorna (impostor, id do morto)."""
     import time as _time
 
@@ -698,9 +692,7 @@ def _impostor_kills_only(
 
 
 @pytest.mark.timeout(40)
-def test_report_out_of_range_is_denied(
-    server: GameServer, four_clients: list[SimulatedClient]
-) -> None:
+def test_report_out_of_range_is_denied(server: GameServer, four_clients: list[GameClient]) -> None:
     _start_game(four_clients)
     impostor, killed_id = _impostor_kills_only(server, four_clients)
     assert impostor.player_id is not None
@@ -718,7 +710,7 @@ def test_report_out_of_range_is_denied(
 
 
 @pytest.mark.timeout(40)
-def test_dead_player_cannot_report(server: GameServer, four_clients: list[SimulatedClient]) -> None:
+def test_dead_player_cannot_report(server: GameServer, four_clients: list[GameClient]) -> None:
     _start_game(four_clients)
     impostor, killed_id = _impostor_kills_only(server, four_clients)
     body_id = impostor.snapshot.bodies[0].body_id if impostor.snapshot else None
@@ -731,7 +723,7 @@ def test_dead_player_cannot_report(server: GameServer, four_clients: list[Simula
 
 
 @pytest.mark.timeout(30)
-def test_duplicate_join_rejected(server: GameServer, four_clients: list[SimulatedClient]) -> None:
+def test_duplicate_join_rejected(server: GameServer, four_clients: list[GameClient]) -> None:
     dup = four_clients[0]
     dup.send(JoinRequest(nickname="dup", protocol_version=PROTOCOL_VERSION))
     err = dup.wait_for(ProtocolError, timeout=5.0)
@@ -744,7 +736,7 @@ def test_duplicate_join_rejected(server: GameServer, four_clients: list[Simulate
 def test_lobby_full_rejected_with_protocol_error() -> None:
     srv = GameServer(host="127.0.0.1", port=_free_port(), config=GameConfig(max_players=1))
     srv.start()
-    first = SimulatedClient()
+    first = GameClient()
     try:
         first.connect("127.0.0.1", srv.port, "one", timeout=5.0)
         err, closed = _raw_join(srv.port, "two")
@@ -757,7 +749,7 @@ def test_lobby_full_rejected_with_protocol_error() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_join_during_game_rejected(server: GameServer, four_clients: list[SimulatedClient]) -> None:
+def test_join_during_game_rejected(server: GameServer, four_clients: list[GameClient]) -> None:
     four_clients[0].start_game()
     for client in four_clients:
         client.wait_for(StartGame, timeout=5.0)
@@ -795,9 +787,7 @@ def test_bad_version_rejected_direct(server: GameServer) -> None:
 
 
 @pytest.mark.timeout(40)
-def test_vote_on_dead_target_denied(
-    server: GameServer, four_clients: list[SimulatedClient]
-) -> None:
+def test_vote_on_dead_target_denied(server: GameServer, four_clients: list[GameClient]) -> None:
     _start_game(four_clients)
     impostor, killed_id, meeting_id = _impostor_kills_and_reports(server, four_clients)
     impostor.vote(meeting_id, killed_id)
@@ -809,7 +799,7 @@ def test_vote_on_dead_target_denied(
 
 @pytest.mark.timeout(40)
 def test_disconnect_during_meeting_finishes_immediately(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     impostor, _killed, meeting_id = _impostor_kills_and_reports(server, four_clients)
@@ -844,7 +834,7 @@ def test_meeting_timeout_finishes_without_votes() -> None:
         config=GameConfig(meeting_vote_timeout_seconds=1.0),
     )
     srv.start()
-    clients = [SimulatedClient() for _ in range(4)]
+    clients = [GameClient() for _ in range(4)]
     try:
         for i, client in enumerate(clients):
             client.connect("127.0.0.1", srv.port, f"player{i}", timeout=5.0)
@@ -882,7 +872,7 @@ def test_join_v1_rejected_with_bad_version(server: GameServer) -> None:
 
 @pytest.mark.timeout(40)
 def test_vote_accepted_confirms_privately(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     impostor, _killed, meeting_id = _impostor_kills_and_reports(server, four_clients)
@@ -898,7 +888,7 @@ def test_vote_accepted_confirms_privately(
 
 @pytest.mark.timeout(40)
 def test_kill_accepted_confirms_cooldown(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     impostor = next(c for c in four_clients if c.role is Role.IMPOSTOR)
@@ -913,7 +903,7 @@ def test_kill_accepted_confirms_cooldown(
 
 @pytest.mark.timeout(40)
 def test_kill_in_cooldown_denied_with_retry_after(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     impostor, killed_id = _impostor_kills_only(server, four_clients)
@@ -944,7 +934,7 @@ def test_kill_in_cooldown_denied_with_retry_after(
 
 @pytest.mark.timeout(40)
 def test_task_out_of_range_denied_with_code(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     import math
 
@@ -970,7 +960,7 @@ def test_task_out_of_range_denied_with_code(
 
 @pytest.mark.timeout(40)
 def test_task_already_done_denied_with_code(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     import time as _time
 
@@ -1003,7 +993,7 @@ def test_task_already_done_denied_with_code(
 
 @pytest.mark.timeout(40)
 def test_tie_meeting_ends_without_ejection_and_game_continues(
-    server: GameServer, four_clients: list[SimulatedClient]
+    server: GameServer, four_clients: list[GameClient]
 ) -> None:
     _start_game(four_clients)
     impostor, _killed, meeting_id = _impostor_kills_and_reports(server, four_clients)
@@ -1071,7 +1061,7 @@ def test_command_queue_backpressure_blocks_and_recovers() -> None:
 @pytest.mark.timeout(20)
 def test_game_loop_survives_tick_exception(
     server: GameServer,
-    four_clients: list[SimulatedClient],
+    four_clients: list[GameClient],
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
