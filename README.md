@@ -95,6 +95,13 @@ sudo setcap 'cap_net_bind_service=+ep' "$(readlink -f .venv/bin/python)"
 uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 --ws-port 80
 ```
 
+> **Amplitude do setcap:** o `readlink -f` resolve ao interpretador Python
+> real — a capability passa a valer para **todo** processo executado com
+> aquele binário, não só para o jogo. Alternativas: aplicar o setcap numa
+> cópia dedicada do binário, ou o sysctl `net.ipv4.ip_unprivileged_port_start`
+> (por namespace; desativa portas privilegiadas para todos os processos do
+> namespace, sem tocar em binário — documentação do kernel Linux).
+
 Caveats honestos:
 
 - O firewall do **próprio host** ainda pode exigir autorização (um clique
@@ -106,6 +113,11 @@ Caveats honestos:
 - Wi-Fi de evento/empresa com **isolamento de clientes** bloqueia TODO
   tráfego entre máquinas: nem a descoberta nem a conexão por IP funcionam.
   Nesse cenário, só um relay público resolveria (fora de escopo).
+- **Descoberta não autenticada:** qualquer host na LAN pode anunciar
+  partidas no broadcast — confira apelido e IP antes de entrar.
+- **Servidor sem autenticação:** qualquer um que alcance a porta entra no
+  lobby, e o host escuta em todas as interfaces (`0.0.0.0`). Use em redes
+  confiáveis (LAN de evento, não Wi-Fi público aberto).
 
 ## Controles (tela de jogo)
 
