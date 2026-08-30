@@ -229,9 +229,8 @@ def test_join_failure_shows_error(app: App) -> None:
     assert "conectar" in app.error_message
 
 
-def test_cancel_connecting_returns_to_main(
-    app: App,
-) -> None:  # porta sem servidor: a conexão ficaria pendente até timeout; cancelar
+def test_cancel_connecting_returns_to_main(app: App) -> None:
+    # porta sem servidor: a conexão ficaria pendente até timeout; cancelar
     # deve voltar imediatamente ao menu sem esperar o worker
     app.connection_state = ConnectionState.CONNECTING
     app.screen_name = Screen.CONNECTING
