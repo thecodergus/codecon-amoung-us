@@ -17,10 +17,9 @@ Sem dependências novas: usa apenas pygame para desenhar/escrever pixels.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
-
-import os
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
