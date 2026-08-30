@@ -1,18 +1,24 @@
-"""Constrói o mapa do lab a partir da cena do pack "Top Down Lab" (ansimuz).
+"""Constrói o mapa do lab a partir de um layout declarado de salas e corredores.
 
-Lê ``models/mapa/Top Down Lab files/previews/preview.png`` (cena 320x176,
-tiles de 16px, com 1px extra à direita), classifica cada tile de 16px por
-maioria de cor (paleta do pack) e emite ``assets/maps/lab.json`` no mesmo
-schema Tiled dos demais mapas do projeto (object layers: floor, walls,
-spawn_points, task_points, emergency_meeting) com mundo 20x11 tiles de 64px
-(1280x704). Também gera ``assets/maps/lab_scene.png`` (a cena em 1280x704,
-usada como fundo pelo renderer) e ``models/mapa/overlay-lab.png`` (cena +
-paredes + marcadores, para QA humana).
+O layout é autorado neste script como retângulos de células (grade 40x22 de
+64 px -> mundo 2560x1408): 7 salas nomeadas ligadas por corredores em anel e
+raios até o hub central, formando ciclos (não é um mapa linear). A cena
+``assets/maps/lab_scene.png`` é composta deterministicamente com tiles do
+pack "Top Down Lab" (ansimuz) — ``models/mapa/Top Down Lab files/Tileset.png``
+— e a geometria lógica é emitida em ``assets/maps/lab.json`` no mesmo schema
+Tiled dos demais mapas (object layers: floor, walls, spawn_points,
+task_points, emergency_meeting, rooms). Também gera
+``assets/maps/lab_menu.png`` (crop 1280x704 do hub, fundo dos menus) e
+``models/mapa/overlay-lab.png`` (cena + paredes + marcadores, QA humana).
 
 O script é determinístico e reexecutável (idempotente) e falha (exit != 0)
-se qualquer gate de validação não passar: conectividade entre todos os
-pontos de gameplay, pontos fora de paredes, linha reta livre do hub até
-cada tarefa (necessária para a navegação dos testes) e contagens mínimas.
+se qualquer gate de validação não passar: mundo maior que o viewport nos
+dois eixos e com pelo menos o dobro da área anterior, quantidade mínima de
+salas, componente caminhável único (BFS), alcançabilidade de todos os pontos
+de gameplay (spawns, tarefas, emergência) por caminho, distâncias mínimas
+entre pontos, distribuição de tarefas por múltiplas salas, ciclo no grafo
+sala/corredor e paredes válidas. A colisão deriva apenas do JSON — a imagem
+é puramente visual.
 
 Sem dependências novas: usa apenas pygame para ler/escrever pixels.
 """
@@ -23,57 +29,99 @@ import json
 import math
 import os
 import sys
-from collections import Counter, deque
+from collections import deque
 from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Paleta do pack (cores observadas no preview.png; tolerância 12 por canal).
-# ---------------------------------------------------------------------------
-_COLOR_FLOOR = [(0, 64, 64), (32, 96, 96), (6, 44, 49)]
-_COLOR_WALL = [
-    (96, 96, 128),
-    (58, 58, 90),
-    (32, 32, 64),
-    (40, 57, 98),
-    (61, 87, 114),
-    (64, 64, 96),
-]
-_COLOR_OBJECT = [
-    (128, 96, 0),
-    (0, 160, 128),
-    (109, 156, 205),
-    (255, 252, 255),
-    (164, 174, 193),
-    (61, 46, 0),
-    (162, 134, 10),
-]
-_PALETTE: dict[str, list[tuple[int, int, int]]] = {
-    "K": [(0, 0, 0)],
-    "F": _COLOR_FLOOR,
-    "W": _COLOR_WALL,
-    "O": _COLOR_OBJECT,
-}
-_TOL2 = 12 * 12
+from codecon_amoung_us.config import MAX_PLAYERS  # noqa: E402
 
-# Escala da cena (px da grade de 16px) para o mundo do jogo (px de 64px).
-_SCALE = 4
-# Tipos de tarefa (mesmos do skeld.json).
-_TASK_TYPES = ["wires", "swipe_card", "fix_wiring", "calibrate", "clean_filter"]
-# Configuração do lab.json.
+# ---------------------------------------------------------------------------
+# Configuração do mundo.
+# ---------------------------------------------------------------------------
 _TILE = 64
-_MAP_W = 20
-_MAP_H = 11
-# Células de chão; objetos (mobília) não bloqueiam.
-_WALKABLE_CLASSES = {"F", "O"}
+_MAP_W = 40
+_MAP_H = 22
+# Viewport de gameplay (canvas lógico 1280x768 menos a faixa do HUD).
+_VIEWPORT_W = 1280
+_VIEWPORT_H = 704
+# Baseline do mapa anterior (20x11 tiles de 64 px) para o gate de área.
+_OLD_AREA = 1280 * 704
+# Tipos de tarefa (mesmos do skeld.json), ciclicamente atribuídos.
+_TASK_TYPES = ["wires", "swipe_card", "fix_wiring", "calibrate", "clean_filter"]
+
+# ---------------------------------------------------------------------------
+# Layout declarado (retângulos de células: nome, x, y, w, h).
+# ---------------------------------------------------------------------------
+_ROOMS: list[tuple[str, int, int, int, int]] = [
+    ("medbay", 3, 3, 8, 5),
+    ("laboratorio", 16, 2, 8, 4),
+    ("eletrica", 29, 3, 8, 5),
+    ("hub", 16, 9, 8, 5),
+    ("reator", 3, 14, 8, 5),
+    ("analise", 16, 16, 8, 4),
+    ("armazem", 29, 14, 8, 5),
+]
+_CORRIDORS: list[tuple[str, int, int, int, int]] = [
+    ("corr_n", 11, 4, 18, 2),  # medbay <-> laboratorio <-> eletrica
+    ("corr_s", 11, 17, 18, 2),  # reator <-> analise <-> armazem
+    ("corr_w", 6, 8, 2, 6),  # medbay <-> reator
+    ("corr_e", 32, 8, 2, 6),  # eletrica <-> armazem
+    ("spoke_n", 19, 6, 2, 3),  # laboratorio -> hub
+    ("spoke_s", 19, 14, 2, 2),  # hub -> analise
+    ("spoke_w", 8, 10, 8, 2),  # corr_w -> hub
+    ("spoke_e", 24, 10, 8, 2),  # hub -> corr_e
+]
+
+# Pontos de gameplay autorados (células), distribuídos pelas salas.
+_SPAWNS: list[tuple[int, int]] = [
+    (17, 10),  # hub
+    (22, 12),  # hub
+    (6, 5),  # medbay
+    (8, 6),  # medbay
+    (21, 3),  # laboratorio
+    (31, 4),  # eletrica
+    (34, 6),  # eletrica
+    (6, 17),  # reator
+    (17, 18),  # analise
+    (32, 17),  # armazem
+]
+_EMERGENCY: tuple[int, int] = (19, 11)  # centro do hub
+_TASKS: list[tuple[int, int]] = [
+    (4, 3),  # medbay
+    (9, 3),  # medbay
+    (17, 3),  # laboratorio
+    (30, 6),  # eletrica
+    (35, 4),  # eletrica
+    (4, 15),  # reator
+    (8, 15),  # reator
+    (21, 18),  # analise
+    (30, 15),  # armazem
+    (35, 17),  # armazem
+]
+
+# ---------------------------------------------------------------------------
+# Tiles do pack (coords de tiles de 16 px no Tileset.png), identificados por
+# inspeção visual da grade: linha 1 = banda de maquinário (topo de parede),
+# linha 2 = face frontal, linha 9 = piso teal liso, (3,8) = faixa de
+# segurança na borda superior (limiar de porta), (3,7)/(4,7) = piso de grade
+# (identidade visual do reator).
+# ---------------------------------------------------------------------------
+_FLOOR_TILES: list[tuple[int, int]] = [(2, 9), (3, 9), (6, 9), (7, 9)]
+_ROOM_FLOOR_TILES: dict[str, list[tuple[int, int]]] = {
+    "reator": [(3, 7), (4, 7)],
+}
+_DOOR_TILE: tuple[int, int] = (3, 8)
+_WALL_TOP_ROW = 1  # cols 1-8: variantes de maquinário
+_WALL_FACE_ROW = 2  # cols 1-8: faces frontais
 
 _REPO = Path(__file__).resolve().parent.parent
-_PREVIEW = _REPO / "models" / "mapa" / "Top Down Lab files" / "previews" / "preview.png"
+_TILESET = _REPO / "models" / "mapa" / "Top Down Lab files" / "Tileset.png"
 _OUT_MAP = _REPO / "assets" / "maps" / "lab.json"
 _OUT_SCENE = _REPO / "assets" / "maps" / "lab_scene.png"
+_OUT_MENU = _REPO / "assets" / "maps" / "lab_menu.png"
 _OUT_OVERLAY = _REPO / "models" / "mapa" / "overlay-lab.png"
 
 
@@ -81,90 +129,68 @@ class BuildError(Exception):
     """Falha de um gate de validação (o script sai com código != 0)."""
 
 
-def classify(color: pygame.Color) -> str:
-    """Classe de cor: F (chão), W (parede), O (objeto), K (fundo/preto)."""
-    r, g, b, a = color.r, color.g, color.b, color.a
-    if a < 128:
-        return "T"
-    best, best_dist = "?", 1 << 30
-    for name, colors in _PALETTE.items():
-        for pr, pg, pb in colors:
-            dist = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
-            if dist < best_dist:
-                best, best_dist = name, dist
-    return best if best_dist <= _TOL2 else "?"
+# ---------------------------------------------------------------------------
+# Geometria do layout.
+# ---------------------------------------------------------------------------
+def _rect_cells(x: int, y: int, w: int, h: int) -> set[tuple[int, int]]:
+    return {(cx, cy) for cy in range(y, y + h) for cx in range(x, x + w)}
 
 
-def load_scene() -> tuple[pygame.Surface, list[list[str]]]:
-    """Carrega o preview, corta a borda de 1px e classifica os tiles de 16px."""
-    if not _PREVIEW.is_file():
-        raise BuildError(f"preview não encontrado: {_PREVIEW}")
-    img = pygame.image.load(str(_PREVIEW))
-    w, h = img.get_size()
-    if w != 321 or h != 176:
-        raise BuildError(f"preview inesperado: {w}x{h} (esperado 321x176)")
-    scene = img.subsurface((0, 0, 320, 176)).copy()
-    tiles: list[list[str]] = []
-    for ty in range(_MAP_H):
-        row: list[str] = []
-        for tx in range(_MAP_W):
-            counts: Counter[str] = Counter()
-            for y in range(ty * 16, ty * 16 + 16):
-                for x in range(tx * 16, tx * 16 + 16):
-                    counts[classify(img.get_at((x, y)))] += 1
-            row.append(counts.most_common(1)[0][0])
-        tiles.append(row)
-    return scene, tiles
+def region_cells() -> dict[str, set[tuple[int, int]]]:
+    """Células de cada região nomeada (salas e corredores)."""
+    regions: dict[str, set[tuple[int, int]]] = {}
+    for name, x, y, w, h in [*_ROOMS, *_CORRIDORS]:
+        regions[name] = _rect_cells(x, y, w, h)
+    return regions
 
 
-def walkable(tiles: list[list[str]]) -> list[list[bool]]:
-    return [[tiles[y][x] in _WALKABLE_CLASSES for x in range(_MAP_W)] for y in range(_MAP_H)]
+def walkable_cells(regions: dict[str, set[tuple[int, int]]]) -> set[tuple[int, int]]:
+    """União das células de salas e corredores."""
+    cells: set[tuple[int, int]] = set()
+    for region in regions.values():
+        cells |= region
+    return cells
 
 
-def largest_component(walk: list[list[bool]]) -> set[tuple[int, int]]:
+def walkable_grid(walk: set[tuple[int, int]]) -> list[list[bool]]:
+    return [[(x, y) in walk for x in range(_MAP_W)] for y in range(_MAP_H)]
+
+
+def largest_component(walk: set[tuple[int, int]]) -> set[tuple[int, int]]:
     """Maior componente conexo de células caminháveis (4-vizinhança)."""
     seen: set[tuple[int, int]] = set()
     best: set[tuple[int, int]] = set()
-    for y in range(_MAP_H):
-        for x in range(_MAP_W):
-            if not walk[y][x] or (x, y) in seen:
-                continue
-            comp: set[tuple[int, int]] = set()
-            queue = deque([(x, y)])
-            seen.add((x, y))
-            while queue:
-                cx, cy = queue.popleft()
-                comp.add((cx, cy))
-                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                    nx, ny = cx + dx, cy + dy
-                    if (
-                        0 <= nx < _MAP_W
-                        and 0 <= ny < _MAP_H
-                        and walk[ny][nx]
-                        and (nx, ny) not in seen
-                    ):
-                        seen.add((nx, ny))
-                        queue.append((nx, ny))
-            if len(comp) > len(best):
-                best = comp
+    for start in sorted(walk):
+        if start in seen:
+            continue
+        comp: set[tuple[int, int]] = set()
+        queue = deque([start])
+        seen.add(start)
+        while queue:
+            cx, cy = queue.popleft()
+            comp.add((cx, cy))
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nxt = (cx + dx, cy + dy)
+                if nxt in walk and nxt not in seen:
+                    seen.add(nxt)
+                    queue.append(nxt)
+        if len(comp) > len(best):
+            best = comp
     return best
 
 
-def blocked_rects(
-    walk: list[list[bool]], playable: set[tuple[int, int]]
-) -> list[tuple[int, int, int, int]]:
-    """Agrupa células bloqueadas adjacentes ao componente jogável em rects.
+def blocked_rects(walk: set[tuple[int, int]]) -> list[tuple[int, int, int, int]]:
+    """Agrupa células bloqueadas adjacentes ao caminhável em rects.
 
-    Células bloqueadas fora da vizinhança do componente são ignoradas (são o
-    fundo externo da cena). O agrupamento é por linhas (run-length merge).
+    Células bloqueadas fora da vizinhança do caminhável são ignoradas (vazio
+    externo). O agrupamento é por linhas (run-length merge vertical).
     """
-    neigh = set()
-    for x, y in playable:
+    neigh: set[tuple[int, int]] = set()
+    for x, y in walk:
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
             nx, ny = x + dx, y + dy
-            if 0 <= nx < _MAP_W and 0 <= ny < _MAP_H and not walk[ny][nx]:
+            if 0 <= nx < _MAP_W and 0 <= ny < _MAP_H and (nx, ny) not in walk:
                 neigh.add((nx, ny))
-    # run-length: para cada linha, runs horizontais de bloqueio
     runs: list[tuple[int, int, int, int]] = []  # (x, y, w, h)
     for y in range(_MAP_H):
         x = 0
@@ -176,7 +202,6 @@ def blocked_rects(
                 runs.append((x0, y, x - x0, 1))
             else:
                 x += 1
-    # merge vertical de runs com mesma faixa x e adjacentes
     merged: list[tuple[int, int, int, int]] = []
     for run in sorted(runs, key=lambda r: (r[0], r[1])):
         placed = False
@@ -191,61 +216,116 @@ def blocked_rects(
     return merged
 
 
-def distance(a: tuple[int, int], b: tuple[int, int]) -> float:
-    return math.hypot(a[0] - b[0], a[1] - b[1])
-
-
-def pick_points(
-    playable: set[tuple[int, int]],
-    total: int,
-    *,
-    anchors: list[tuple[int, int]] | None = None,
-) -> list[tuple[int, int]]:
-    """Escolhe pontos greedy: maximiza a distância mínima aos já escolhidos.
-
-    ``total`` é o número final de células (âncoras + novas); retorna apenas
-    as novas células.
-    """
-    anchors = anchors or []
-    chosen = list(anchors)
-    pool = sorted(playable)
-    while len(chosen) < total:
-        best_cell, best_score = pool[0], -1.0
-        for cell in pool:
-            if cell in chosen:
-                continue
-            score = min(distance(cell, other) for other in chosen) if chosen else 1.0
-            if score > best_score:
-                best_cell, best_score = cell, score
-        chosen.append(best_cell)
-    return chosen[len(anchors) :]
-
-
-def manhattan(a: tuple[int, int], b: tuple[int, int]) -> int:
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
-
-
-def pick_emergency(
-    playable: set[tuple[int, int]], blocked: set[tuple[int, int]]
-) -> tuple[int, int]:
-    """Hub: célula central do componente (menor soma de distâncias Manhattan a
-    todas as demais), desde que não esteja colada em um bloqueio."""
-    candidates = [c for c in playable if min(manhattan(c, other) for other in blocked) >= 2]
-    if not candidates:
-        candidates = sorted(playable)
-    return min(candidates, key=lambda c: sum(manhattan(c, other) for other in playable))
-
-
 def cell_center(cell: tuple[int, int]) -> tuple[float, float]:
     """Centro da célula em coordenadas de mundo (px)."""
-    return (cell[0] * _SCALE * 16 + 32.0, cell[1] * _SCALE * 16 + 32.0)
+    return (cell[0] * _TILE + _TILE / 2, cell[1] * _TILE + _TILE / 2)
 
 
+# ---------------------------------------------------------------------------
+# Gates de validação (BFS/alcançabilidade — nunca linha reta).
+# ---------------------------------------------------------------------------
+def validate(regions: dict[str, set[tuple[int, int]]], walk: set[tuple[int, int]]) -> None:
+    """Falha com ``BuildError`` se qualquer invariante do mapa não valer."""
+    # Mundo excede o viewport nos dois eixos e área >= 2x a anterior.
+    world_w, world_h = _MAP_W * _TILE, _MAP_H * _TILE
+    if world_w <= _VIEWPORT_W or world_h <= _VIEWPORT_H:
+        raise BuildError(f"mundo {world_w}x{world_h} não excede o viewport nos dois eixos")
+    if world_w * world_h < 2 * _OLD_AREA:
+        raise BuildError(f"área {world_w * world_h} menor que 2x a anterior ({2 * _OLD_AREA})")
+
+    # Salas: quantidade mínima, nomes únicos, retângulos disjuntos.
+    if len(_ROOMS) < 6:
+        raise BuildError(f"poucas salas: {len(_ROOMS)} (mínimo 6)")
+    names = [name for name, *_ in _ROOMS]
+    if len(set(names)) != len(names):
+        raise BuildError("nomes de sala duplicados")
+    for i, (name_a, xa, ya, wa, ha) in enumerate(_ROOMS):
+        cells_a = _rect_cells(xa, ya, wa, ha)
+        for name_b, xb, yb, wb, hb in _ROOMS[i + 1 :]:
+            if cells_a & _rect_cells(xb, yb, wb, hb):
+                raise BuildError(f"salas sobrepostas: {name_a} / {name_b}")
+
+    # Caminhável forma um único componente (nenhuma região inacessível).
+    component = largest_component(walk)
+    if component != walk:
+        raise BuildError(
+            f"caminhável fragmentado: {len(walk) - len(component)} células fora do componente"
+        )
+
+    # Pontos de gameplay: dentro do caminhável e alcançáveis (mesmo componente).
+    all_points = [*_SPAWNS, *_TASKS, _EMERGENCY]
+    if len(set(all_points)) != len(all_points):
+        raise BuildError("pontos de gameplay duplicados")
+    for cell in all_points:
+        if cell not in walk:
+            raise BuildError(f"ponto fora da área caminhável: {cell}")
+        if cell not in component:
+            raise BuildError(f"ponto inalcançável a partir do hub: {cell}")
+
+    # Distâncias mínimas: 1,5 célula entre pontos; spawns longe do botão.
+    for i, a in enumerate(all_points):
+        for b in all_points[i + 1 :]:
+            if math.hypot(a[0] - b[0], a[1] - b[1]) < 1.5:
+                raise BuildError(f"pontos próximos demais: {a} {b}")
+    for spawn in _SPAWNS:
+        if abs(spawn[0] - _EMERGENCY[0]) + abs(spawn[1] - _EMERGENCY[1]) < 2:
+            raise BuildError(f"spawn colado no botão de emergência: {spawn}")
+
+    # Spawns para o máximo de jogadores; tarefas distribuídas por salas.
+    if len(_SPAWNS) < MAX_PLAYERS:
+        raise BuildError(f"spawns insuficientes: {len(_SPAWNS)} < MAX_PLAYERS={MAX_PLAYERS}")
+    task_rooms = {room_of(cell) for cell in _TASKS} - {None}
+    if len(task_rooms) < 4:
+        raise BuildError(f"tarefas concentradas: apenas {len(task_rooms)} salas (mínimo 4)")
+
+    # Topologia não linear: grafo sala/corredor com pelo menos um ciclo.
+    if not _region_graph_has_cycle(regions):
+        raise BuildError("grafo sala/corredor sem ciclos (mapa linear)")
+
+
+def room_of(cell: tuple[int, int]) -> str | None:
+    """Nome da sala que contém a célula (None se corredor/fora)."""
+    for name, x, y, w, h in _ROOMS:
+        if x <= cell[0] < x + w and y <= cell[1] < y + h:
+            return name
+    return None
+
+
+def _region_graph_has_cycle(regions: dict[str, set[tuple[int, int]]]) -> bool:
+    """True se o grafo de adjacência entre regiões contém um ciclo.
+
+    Aresta = regiões com células sobrepostas ou 4-adjacentes; ciclo detectado
+    por union-find (aresta ligando nós já no mesmo componente).
+    """
+    parent = {name: name for name in regions}
+
+    def find(node: str) -> str:
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    names = sorted(regions)
+    expanded = {
+        name: cells | {(cx + dx, cy + dy) for cx, cy in cells for dx, dy in ((1, 0), (0, 1))}
+        for name, cells in regions.items()
+    }
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            if not (expanded[a] & regions[b]):
+                continue
+            root_a, root_b = find(a), find(b)
+            if root_a == root_b:
+                return True
+            parent[root_a] = root_b
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Emissão do lab.json (schema Tiled, object layers).
+# ---------------------------------------------------------------------------
 def build_lab_json(
     walls: list[tuple[int, int, int, int]],
-    spawns: list[tuple[int, int]],
-    tasks: list[tuple[int, int]],
-    emergency: tuple[int, int],
 ) -> dict[str, object]:
     """Monta o documento Tiled equivalente ao skeld.json (object layers)."""
     next_id = 1
@@ -309,7 +389,7 @@ def build_lab_json(
     )
     # spawn_points
     spawn_objects: list[dict[str, object]] = []
-    for index, (sx, sy) in enumerate(spawns):
+    for index, (sx, sy) in enumerate(_SPAWNS):
         px, py = cell_center((sx, sy))
         spawn_objects.append(
             {
@@ -338,7 +418,7 @@ def build_lab_json(
     )
     # task_points
     task_objects: list[dict[str, object]] = []
-    for index, (tx, ty) in enumerate(tasks):
+    for index, (tx, ty) in enumerate(_TASKS):
         px, py = cell_center((tx, ty))
         task_objects.append(
             {
@@ -348,7 +428,7 @@ def build_lab_json(
                 "x": px,
                 "y": py,
                 "properties": [
-                    {"name": "task_type", "type": "string", "value": _TASK_TYPES[index]},
+                    {"name": "task_type", "type": "string", "value": _TASK_TYPES[index % 5]},
                     {"name": "interaction_radius", "type": "float", "value": 20.0},
                 ],
                 "visible": True,
@@ -369,7 +449,7 @@ def build_lab_json(
         }
     )
     # emergency_meeting
-    ex, ey = cell_center(emergency)
+    ex, ey = cell_center(_EMERGENCY)
     layers.append(
         {
             "id": 5,
@@ -394,6 +474,32 @@ def build_lab_json(
             ],
         }
     )
+    # rooms (metadados de validação/QA; opcionais no loader)
+    room_objects: list[dict[str, object]] = []
+    for name, x, y, w, h in _ROOMS:
+        room_objects.append(
+            {
+                "id": obj_id(),
+                "name": name,
+                "x": x * _TILE,
+                "y": y * _TILE,
+                "width": w * _TILE,
+                "height": h * _TILE,
+                "visible": True,
+                "rotation": 0,
+            }
+        )
+    layers.append(
+        {
+            "id": 6,
+            "name": "rooms",
+            "type": "objectgroup",
+            "visible": True,
+            "opacity": 1,
+            "draworder": "topdown",
+            "objects": room_objects,
+        }
+    )
     return {
         "type": "map",
         "version": "1.10",
@@ -405,22 +511,81 @@ def build_lab_json(
         "tilewidth": _TILE,
         "tileheight": _TILE,
         "infinite": False,
-        "nextlayerid": 6,
+        "nextlayerid": 7,
         "nextobjectid": next_id,
         "layers": layers,
         "tilesets": [],
     }
 
 
+# ---------------------------------------------------------------------------
+# Composição da cena (visual; colisão deriva apenas do JSON).
+# ---------------------------------------------------------------------------
+def compose_scene(
+    regions: dict[str, set[tuple[int, int]]], walk: set[tuple[int, int]]
+) -> pygame.Surface:
+    """Renderiza o mundo 2560x1408 com tiles do pack (1 célula = 1 tile x4).
+
+    Regras: caminhável -> piso teal (portas com faixa de segurança); parede
+    com vizinho caminhável ao sul -> banda de maquinário; parede logo abaixo
+    de maquinário -> face frontal; demais células -> vazio (preto).
+    """
+    if not _TILESET.is_file():
+        raise BuildError(f"tileset não encontrado: {_TILESET}")
+    tileset = pygame.image.load(str(_TILESET))
+    cache: dict[tuple[int, int], pygame.Surface] = {}
+
+    def tile(tx: int, ty: int) -> pygame.Surface:
+        key = (tx, ty)
+        if key not in cache:
+            sub = tileset.subsurface((tx * 16, ty * 16, 16, 16)).copy()
+            cache[key] = pygame.transform.scale(sub, (_TILE, _TILE))
+        return cache[key]
+
+    room_cells: set[tuple[int, int]] = set()
+    for name, *_ in _ROOMS:
+        room_cells |= regions[name]
+    room_of_cell = {cell: name for name, *_ in _ROOMS for cell in regions[name]}
+    doors = {
+        cell
+        for cell in walk - room_cells
+        if any(
+            (cell[0] + dx, cell[1] + dy) in room_cells
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        )
+    }
+    machinery = {
+        (cx, cy)
+        for cx in range(_MAP_W)
+        for cy in range(_MAP_H)
+        if (cx, cy) not in walk and (cx, cy + 1) in walk
+    }
+
+    scene = pygame.Surface((_MAP_W * _TILE, _MAP_H * _TILE))
+    scene.fill((0, 0, 0))
+    for cy in range(_MAP_H):
+        for cx in range(_MAP_W):
+            cell = (cx, cy)
+            if cell in walk:
+                variants = _ROOM_FLOOR_TILES.get(room_of_cell.get(cell, ""), _FLOOR_TILES)
+                index = (cx * 3 + cy * 7) % len(variants)
+                sprite = tile(*_DOOR_TILE) if cell in doors else tile(*variants[index])
+            elif cell in machinery:
+                sprite = tile(1 + cx % 8, _WALL_TOP_ROW)
+            elif (cx, cy - 1) in machinery:
+                sprite = tile(1 + cx % 8, _WALL_FACE_ROW)
+            else:
+                continue
+            scene.blit(sprite, (cx * _TILE, cy * _TILE))
+    return scene
+
+
 def draw_overlay(
     scene: pygame.Surface,
     walls: list[tuple[int, int, int, int]],
-    spawns: list[tuple[int, int]],
-    tasks: list[tuple[int, int]],
-    emergency: tuple[int, int],
 ) -> None:
     """Gera overlay-lab.png: cena + paredes magenta + marcadores (QA humana)."""
-    canvas = pygame.transform.scale(scene, (_MAP_W * _TILE, _MAP_H * _TILE))
+    canvas = scene.copy()
     overlay = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
     for x, y, w, h in walls:
         pygame.draw.rect(overlay, (255, 0, 255, 90), (x * _TILE, y * _TILE, w * _TILE, h * _TILE))
@@ -428,65 +593,55 @@ def draw_overlay(
             overlay, (255, 0, 255, 255), (x * _TILE, y * _TILE, w * _TILE, h * _TILE), 2
         )
     canvas.blit(overlay, (0, 0))
-    for sx, sy in spawns:
+    for sx, sy in _SPAWNS:
         px, py = cell_center((sx, sy))
         pygame.draw.circle(canvas, (80, 160, 255), (int(px), int(py)), 10, 3)
-    for tx, ty in tasks:
+    for tx, ty in _TASKS:
         px, py = cell_center((tx, ty))
         pygame.draw.circle(canvas, (255, 220, 80), (int(px), int(py)), 8, 3)
-    ex, ey = cell_center(emergency)
+    ex, ey = cell_center(_EMERGENCY)
     pygame.draw.circle(canvas, (255, 60, 60), (int(ex), int(ey)), 12, 3)
     pygame.image.save(canvas, str(_OUT_OVERLAY))
+
+
+def save_menu_crop(scene: pygame.Surface) -> None:
+    """Crop 1280x704 centrado no hub (fundo dos menus, sem distorção)."""
+    hx, hy = cell_center(_EMERGENCY)
+    left = min(max(int(hx) - _VIEWPORT_W // 2, 0), _MAP_W * _TILE - _VIEWPORT_W)
+    top = min(max(int(hy) - _VIEWPORT_H // 2, 0), _MAP_H * _TILE - _VIEWPORT_H)
+    crop = scene.subsurface((left, top, _VIEWPORT_W, _VIEWPORT_H)).copy()
+    pygame.image.save(crop, str(_OUT_MENU))
 
 
 def main() -> int:
     pygame.init()
     try:
-        scene, tiles = load_scene()
-        walk = walkable(tiles)
-        playable = largest_component(walk)
-        if len(playable) < 60:
-            raise BuildError(f"componente jogável pequeno demais: {len(playable)} células")
-        walls = blocked_rects(walk, playable)
-
-        # emergency: célula central do componente, longe de paredes.
-        blocked = {(x, y) for y in range(_MAP_H) for x in range(_MAP_W) if not walk[y][x]}
-        emergency = pick_emergency(playable, blocked)
-
-        spawns = pick_points(playable, 5, anchors=[emergency])
-        tasks = pick_points(playable, 10, anchors=[emergency, *spawns])
-
-        # Gates
-        all_points = [emergency, *spawns, *tasks]
-        if len({p for p in all_points}) != len(all_points):
-            raise BuildError("pontos de gameplay duplicados")
-        for cell in all_points:
-            if cell not in playable:
-                raise BuildError(f"ponto fora do componente jogável: {cell}")
-        for i, a in enumerate(all_points):
-            for b in all_points[i + 1 :]:
-                if distance(a, b) < 1.5:
-                    raise BuildError(f"pontos próximos demais: {a} {b}")
+        regions = region_cells()
+        walk = walkable_cells(regions)
+        validate(regions, walk)
+        walls = blocked_rects(walk)
         if len(walls) < 3:
             raise BuildError(f"poucas paredes extraídas: {len(walls)}")
         for x, y, w, h in walls:
             if w < 1 or h < 1:
                 raise BuildError(f"parede degenerada: {(x, y, w, h)}")
 
-        map_doc = build_lab_json(walls, spawns, tasks, emergency)
+        map_doc = build_lab_json(walls)
         _OUT_MAP.parent.mkdir(parents=True, exist_ok=True)
         _OUT_MAP.write_text(json.dumps(map_doc, indent=2), encoding="utf-8")
-        pygame.image.save(
-            pygame.transform.scale(scene, (_MAP_W * _TILE, _MAP_H * _TILE)), str(_OUT_SCENE)
-        )
-        draw_overlay(scene, walls, spawns, tasks, emergency)
+        scene = compose_scene(regions, walk)
+        pygame.image.save(scene, str(_OUT_SCENE))
+        save_menu_crop(scene)
+        draw_overlay(scene, walls)
 
         print(f"lab.json -> {_OUT_MAP.relative_to(_REPO)}")
         print(f"scene    -> {_OUT_SCENE.relative_to(_REPO)}")
+        print(f"menu     -> {_OUT_MENU.relative_to(_REPO)}")
         print(f"overlay  -> {_OUT_OVERLAY.relative_to(_REPO)}")
         print(
-            f"componente jogável: {len(playable)} células; paredes: {len(walls)}; "
-            f"spawns: {spawns}; tasks: {tasks}; emergency: {emergency}"
+            f"mundo {_MAP_W * _TILE}x{_MAP_H * _TILE}; salas: {len(_ROOMS)}; "
+            f"caminhável: {len(walk)} células; paredes: {len(walls)}; "
+            f"spawns: {len(_SPAWNS)}; tasks: {len(_TASKS)}; emergency: {_EMERGENCY}"
         )
         return 0
     except BuildError as exc:
