@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 import pygame
 
@@ -23,7 +24,7 @@ from ..protocol import SnapshotBody, SnapshotPlayer
 from .camera import Camera2D
 from .components import ActionPrompt
 from .fonts import FontBook
-from .sprites import DuckeeSprites, color_for
+from .sprites import DuckeeSprites, PlayerAnim, color_for
 from .task_props import PROP_SIZE, TaskProps
 from .theme import HUD_HEIGHT, RADIUS, SPACING, TOKENS
 from .viewmodel import GameHudView, TaskMarkerState, TaskMarkerView
@@ -51,6 +52,35 @@ WORLD_HEIGHT = 704
 # Margem de culling (px) além do retângulo da câmera: cobre sprites e
 # marcadores parcialmente visíveis na borda.
 _CULL_MARGIN = 64
+
+# Cadência dos frames por animação (segundos por frame).
+_WALK_FRAME_SECONDS = 0.13
+_IDLE_FRAME_SECONDS = 0.42
+# Histerese de movimento (ms): cobre ~3 períodos de snapshot (20 Hz) para a
+# animação não piscar idle/walk entre atualizações de posição.
+_MOVING_HYSTERESIS_MS = 150.0
+# Taxa da suavização exponencial da posição renderizada (1/s), mesma fórmula
+# do amortecimento da Camera2D.
+_POS_SMOOTH_RATE = 14.0
+# Distância (px) além da qual a posição renderizada faz snap (teleporte,
+# spawn, primeira aparição) em vez de deslizar.
+_POS_SNAP_DISTANCE = 96.0
+# Delta mínimo (px) entre snapshots considerado movimento.
+_MOVEMENT_EPSILON = 0.5
+
+
+@dataclass
+class _PlayerAnimState:
+    """Estado de animação/render de um jogador (relógio e posição próprios)."""
+
+    render_x: float
+    render_y: float
+    last_tx: float
+    last_ty: float
+    moving_until_ms: float
+    clock: float  # segundos acumulados na anim corrente
+    anim: PlayerAnim
+    flip: bool
 
 
 def _in_view(camera: Camera2D, x: float, y: float) -> bool:
@@ -93,8 +123,10 @@ class Renderer:
         self.sprites = DuckeeSprites()
         self.task_props = TaskProps()
         self._background = self._load_background()
-        self._last_pos: dict[int, tuple[float, float]] = {}
-        self._last_flip: dict[int, bool] = {}
+        # animação por jogador: relógio interno avançado por dt (determinístico
+        # em testes; independe de pygame.time.get_ticks)
+        self._player_anims: dict[int, _PlayerAnimState] = {}
+        self._anim_now_ms: float = 0.0
 
     def _load_background(self) -> pygame.Surface:
         """Cena do lab em resolução de mundo (maior que o viewport).
@@ -213,31 +245,76 @@ class Renderer:
         me_id: int,
         *,
         nicknames: Mapping[int, str] | None = None,
+        dt: float = 1.0 / 60.0,
     ) -> None:
-        ticks = pygame.time.get_ticks()
+        """Jogadores com animação fluida: relógio por jogador + histerese de
+        movimento + suavização exponencial de posição.
+
+        Posições só mudam quando chega snapshot (~20 Hz) e o render roda a
+        60 fps: a histerese mantém WALK estável entre snapshots (sem piscar
+        idle/walk) e a suavização elimina o degrau de 20 Hz. A transição
+        idle→walk zera o clock do jogador — o ciclo sempre começa no frame 0.
+        """
+        dt = min(max(dt, 0.0), 0.1)  # teto contra saltos (travamentos, Alt+Tab)
+        self._anim_now_ms += dt * 1000.0
         for player in players:
             color = color_for(player.player_id)
-            last = self._last_pos.get(player.player_id)
-            dx = player.x - last[0] if last is not None else 0.0
-            dy = player.y - last[1] if last is not None else 0.0
-            moving = math.hypot(dx, dy) > 2.0
-            if dx < -0.5:
-                self._last_flip[player.player_id] = True
-            elif dx > 0.5:
-                self._last_flip[player.player_id] = False
-            flip = self._last_flip.get(player.player_id, False)
-            if player.alive:
-                anim = "walk" if moving else "idle"
-                count = self.sprites.frame_count(color, anim)
-                index = (ticks // (130 if moving else 420)) % count
+            state = self._player_anims.get(player.player_id)
+            if state is None:
+                state = _PlayerAnimState(
+                    render_x=player.x,
+                    render_y=player.y,
+                    last_tx=player.x,
+                    last_ty=player.y,
+                    moving_until_ms=0.0,
+                    clock=0.0,
+                    anim=PlayerAnim.IDLE,
+                    flip=False,
+                )
+                self._player_anims[player.player_id] = state
+            dx_snap = player.x - state.last_tx
+            dy_snap = player.y - state.last_ty
+            if math.hypot(dx_snap, dy_snap) > _MOVEMENT_EPSILON:
+                state.moving_until_ms = self._anim_now_ms + _MOVING_HYSTERESIS_MS
+                state.last_tx, state.last_ty = player.x, player.y
+                if dx_snap < -0.5:
+                    state.flip = True
+                elif dx_snap > 0.5:
+                    state.flip = False
+            teleport = (
+                math.hypot(player.x - state.render_x, player.y - state.render_y)
+                > _POS_SNAP_DISTANCE
+            )
+            if not player.alive or teleport or self.reduced_motion:
+                state.render_x, state.render_y = player.x, player.y
             else:
-                anim, index = "death", 0
-            if not _in_view(camera, player.x, player.y):
-                self._last_pos[player.player_id] = (player.x, player.y)
-                continue  # fora do retângulo da câmera
-            sx, sy = camera.world_to_screen(player.x, player.y)
-            sprite = self.sprites.frame(color, anim, index)
-            if flip:
+                alpha = 1.0 - math.exp(-_POS_SMOOTH_RATE * dt)
+                state.render_x += (player.x - state.render_x) * alpha
+                state.render_y += (player.y - state.render_y) * alpha
+            if not player.alive:
+                target = PlayerAnim.DEATH
+            elif self._anim_now_ms < state.moving_until_ms:
+                target = PlayerAnim.WALK
+            else:
+                target = PlayerAnim.IDLE
+            if target is not state.anim:
+                state.anim = target
+                state.clock = 0.0
+            state.clock += dt
+            if state.anim is PlayerAnim.DEATH:
+                index = 0
+            else:
+                frame_seconds = (
+                    _WALK_FRAME_SECONDS if state.anim is PlayerAnim.WALK else _IDLE_FRAME_SECONDS
+                )
+                index = int(state.clock / frame_seconds) % self.sprites.frame_count(
+                    color, state.anim
+                )
+            if not _in_view(camera, state.render_x, state.render_y):
+                continue  # fora do retângulo da câmera (estado já avançado)
+            sx, sy = camera.world_to_screen(state.render_x, state.render_y)
+            sprite = self.sprites.frame(color, state.anim, index)
+            if state.flip:
                 sprite = pygame.transform.flip(sprite, True, False)
             width, height = sprite.get_size()
             surface.blit(sprite, (round(sx - width / 2), round(sy - height)))
@@ -255,7 +332,6 @@ class Renderer:
             )
             if player.player_id == me_id and player.alive:
                 pygame.draw.circle(surface, COLOR_ME, (round(sx), round(sy)), 22, 2)
-            self._last_pos[player.player_id] = (player.x, player.y)
 
     def draw_bodies(
         self, surface: pygame.Surface, camera: Camera2D, bodies: list[SnapshotBody]
@@ -265,7 +341,7 @@ class Renderer:
                 continue  # fora do retângulo da câmera
             sx, sy = camera.world_to_screen(body.x, body.y)
             color = color_for(body.player_id)
-            sprite = self.sprites.frame(color, "death", 0)
+            sprite = self.sprites.frame(color, PlayerAnim.DEATH, 0)
             width, height = sprite.get_size()
             surface.blit(sprite, (round(sx - width / 2), round(sy - height)))
             x, y = round(sx), round(sy)

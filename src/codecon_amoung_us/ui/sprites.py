@@ -15,13 +15,14 @@ As cores seguem ``DUCKEE_COLORS``; a cor de um jogador é derivada do
 from __future__ import annotations
 
 from collections import Counter
+from enum import StrEnum
 from pathlib import Path
 
 import pygame
 
 from ..config import DUCKEE_DIRNAME, default_models_dir
 
-__all__ = ["DUCKEE_COLORS", "color_for", "DuckeeSprites"]
+__all__ = ["DUCKEE_COLORS", "PlayerAnim", "color_for", "DuckeeSprites"]
 
 DUCKEE_COLORS: tuple[str, ...] = (
     "aqua",
@@ -34,11 +35,20 @@ DUCKEE_COLORS: tuple[str, ...] = (
     "yellow",
 )
 
+
+class PlayerAnim(StrEnum):
+    """Animações de personagem disponíveis (conjunto finito e fechado)."""
+
+    IDLE = "idle"
+    WALK = "walk"
+    DEATH = "death"
+
+
 # animação -> (pasta no asset, número de frames)
-_ANIMATIONS: dict[str, tuple[str, int]] = {
-    "idle": ("idle", 4),
-    "walk": ("walk_run", 4),
-    "death": ("death", 1),
+_ANIMATIONS: dict[PlayerAnim, tuple[str, int]] = {
+    PlayerAnim.IDLE: ("idle", 4),
+    PlayerAnim.WALK: ("walk_run", 4),
+    PlayerAnim.DEATH: ("death", 1),
 }
 
 _SCALE = 3
@@ -49,10 +59,10 @@ def color_for(player_id: int) -> str:
     return DUCKEE_COLORS[player_id % len(DUCKEE_COLORS)]
 
 
-def _frame_filename(anim: str, index: int) -> str:
-    if anim == "death":
+def _frame_filename(anim: PlayerAnim, index: int) -> str:
+    if anim is PlayerAnim.DEATH:
         return "duckee_death.png"
-    base = "walk_run" if anim == "walk" else anim
+    base = "walk_run" if anim is PlayerAnim.WALK else anim.value
     return f"duckee_{base}{index + 1}.png"
 
 
@@ -66,8 +76,8 @@ class DuckeeSprites:
 
     def __init__(self, models_dir: Path | None = None) -> None:
         base = (models_dir or default_models_dir()) / DUCKEE_DIRNAME
-        self._frames: dict[tuple[str, str, int], pygame.Surface] = {}
-        self._counts: dict[tuple[str, str], int] = {}
+        self._frames: dict[tuple[str, PlayerAnim, int], pygame.Surface] = {}
+        self._counts: dict[tuple[str, PlayerAnim], int] = {}
         for color in DUCKEE_COLORS:
             for anim, (folder, count) in _ANIMATIONS.items():
                 self._counts[(color, anim)] = count
@@ -135,8 +145,8 @@ class DuckeeSprites:
             cropped, (cropped.get_width() * _SCALE, cropped.get_height() * _SCALE)
         )
 
-    def frame_count(self, color: str, anim: str) -> int:
+    def frame_count(self, color: str, anim: PlayerAnim) -> int:
         return self._counts[(color, anim)]
 
-    def frame(self, color: str, anim: str, index: int) -> pygame.Surface:
+    def frame(self, color: str, anim: PlayerAnim, index: int) -> pygame.Surface:
         return self._frames[(color, anim, index)]

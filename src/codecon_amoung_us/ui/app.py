@@ -66,7 +66,7 @@ from .render import (
     WORLD_HEIGHT,
     Renderer,
 )
-from .sprites import color_for
+from .sprites import PlayerAnim, color_for
 from .theme import TOKENS, settings_from_env
 from .viewmodel import (
     VOTING_CARDS_PER_PAGE,
@@ -936,7 +936,12 @@ class App:
         if snapshot is not None and self.my_id is not None:
             self.renderer.draw_bodies(self.screen, self.camera, snapshot.bodies)
             self.renderer.draw_players(
-                self.screen, self.camera, snapshot.players, self.my_id, nicknames=self._nicknames
+                self.screen,
+                self.camera,
+                snapshot.players,
+                self.my_id,
+                nicknames=self._nicknames,
+                dt=self._dt,
             )
         hud = derive_game_hud(
             role=self.role,
@@ -1076,7 +1081,7 @@ class App:
 
     def _avatar(self, player_id: int, height: int) -> pygame.Surface:
         """Sprite duckee do jogador redimensionado para a altura dada."""
-        sprite = self.renderer.sprites.frame(color_for(player_id), "idle", 0)
+        sprite = self.renderer.sprites.frame(color_for(player_id), PlayerAnim.IDLE, 0)
         width, _height = sprite.get_size()
         scale = height / _height
         return pygame.transform.scale(sprite, (max(1, int(width * scale)), height))
