@@ -18,8 +18,8 @@ def game_map() -> GameMap:
 
 def test_loads_real_asset(game_map: GameMap) -> None:
     assert game_map.name == "lab"
-    assert game_map.width == 20
-    assert game_map.height == 11
+    assert game_map.width == 40
+    assert game_map.height == 22
     assert game_map.tile_width == 64
     assert game_map.tile_height == 64
 
@@ -32,12 +32,12 @@ def test_walls_loaded(game_map: GameMap) -> None:
 
 
 def test_spawn_points_with_ids(game_map: GameMap) -> None:
-    assert [s.spawn_id for s in game_map.spawn_points] == [0, 1, 2, 3]
-    assert len({(s.x, s.y) for s in game_map.spawn_points}) == 4
+    assert [s.spawn_id for s in game_map.spawn_points] == list(range(10))
+    assert len({(s.x, s.y) for s in game_map.spawn_points}) == 10
 
 
 def test_task_points_with_properties(game_map: GameMap) -> None:
-    assert len(game_map.task_points) == 5
+    assert len(game_map.task_points) == 10
     by_type = {t.task_type for t in game_map.task_points}
     assert {"wires", "swipe_card", "fix_wiring", "calibrate", "clean_filter"} <= by_type
     # interaction_radius veio da propriedade customizada do Tiled
@@ -47,6 +47,15 @@ def test_task_points_with_properties(game_map: GameMap) -> None:
 def test_emergency_meeting_point(game_map: GameMap) -> None:
     assert game_map.emergency_meeting is not None
     assert game_map.emergency_meeting_radius == 25.0
+
+
+def test_rooms_loaded(game_map: GameMap) -> None:
+    # mapa multi-sala: pelo menos 6 áreas nomeadas e distintas
+    assert len(game_map.rooms) >= 6
+    names = [room.name for room in game_map.rooms]
+    assert len(set(names)) == len(names)
+    for room in game_map.rooms:
+        assert room.rect.width > 0 and room.rect.height > 0
 
 
 def test_floor_and_decorative(game_map: GameMap) -> None:
@@ -94,4 +103,4 @@ def test_missing_required_layer_raises(tmp_path: object) -> None:
 
 def test_bounds(game_map: GameMap) -> None:
     left, top, right, bottom = game_map.bounds()
-    assert (left, top, right, bottom) == (0.0, 0.0, 1280.0, 704.0)
+    assert (left, top, right, bottom) == (0.0, 0.0, 2560.0, 1408.0)

@@ -255,15 +255,18 @@ def test_progress_bar_and_action_prompt_draw() -> None:
 def test_renderer_reduced_motion_disables_pulse() -> None:
     from codecon_amoung_us.config import default_map_path
     from codecon_amoung_us.map.loader import load_map
+    from codecon_amoung_us.ui.camera import Camera2D
     from codecon_amoung_us.ui.render import Renderer
     from codecon_amoung_us.ui.viewmodel import TaskMarkerState, TaskMarkerView
 
     pygame.init()
-    renderer = Renderer(load_map(default_map_path()), reduced_motion=True)
+    game_map = load_map(default_map_path())
+    renderer = Renderer(game_map, reduced_motion=True)
     assert renderer.reduced_motion is True
+    camera = Camera2D(viewport_size=(1280.0, 704.0), bounds=game_map.bounds())
     surface = pygame.Surface((1280, 768))
     markers = [TaskMarkerView(1, 300.0, 300.0, TaskMarkerState.INTERACTABLE, pulse=True)]
-    renderer.draw_map(surface, markers)  # desenha sem pulsação contínua
+    renderer.draw_map(surface, camera, markers)  # desenha sem pulsação contínua
 
 
 def test_ui_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:

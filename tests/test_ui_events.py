@@ -329,6 +329,33 @@ def test_toasts_expire_by_clock(app: App) -> None:
     assert [t.text for t in app.toasts] == ["segundo"]
 
 
+def test_hud_stays_fixed_when_camera_moves(app: App) -> None:
+    from codecon_amoung_us.protocol import SnapshotPlayer, WorldSnapshot
+
+    app.my_id = 0
+    app.role = Role.CREW
+    app.screen_name = Screen.GAME
+    app.last_snapshot = WorldSnapshot(
+        tick=1, players=[SnapshotPlayer(player_id=0, x=400.0, y=352.0, alive=True)], bodies=[]
+    )
+    hud_rect = pygame.Rect(0, 704, 1280, 64)
+    world_rect = pygame.Rect(0, 0, 1280, 704)
+
+    app.camera.snap_to(640.0, 352.0)
+    app._render_game([])
+    hud_a = pygame.image.tobytes(app.screen.subsurface(hud_rect), "RGBA")
+    world_a = pygame.image.tobytes(app.screen.subsurface(world_rect), "RGBA")
+
+    app.camera.snap_to(1920.0, 1056.0)
+    app._render_game([])
+    hud_b = pygame.image.tobytes(app.screen.subsurface(hud_rect), "RGBA")
+    world_b = pygame.image.tobytes(app.screen.subsurface(world_rect), "RGBA")
+
+    # HUD pixel-idêntico entre posições de câmera; região do mundo muda
+    assert hud_a == hud_b
+    assert world_a != world_b
+
+
 def test_toast_stack_limited_to_three(app: App) -> None:
     for text in ("a", "b", "c", "d"):
         app._push_toast(text)
