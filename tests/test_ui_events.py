@@ -229,8 +229,9 @@ def test_join_failure_shows_error(app: App) -> None:
     assert "conectar" in app.error_message
 
 
-def test_cancel_connecting_returns_to_main(app: App) -> None:
-    # porta sem servidor: a conexão ficaria pendente até timeout; cancelar
+def test_cancel_connecting_returns_to_main(
+    app: App,
+) -> None:  # porta sem servidor: a conexão ficaria pendente até timeout; cancelar
     # deve voltar imediatamente ao menu sem esperar o worker
     app.connection_state = ConnectionState.CONNECTING
     app.screen_name = Screen.CONNECTING
@@ -707,7 +708,7 @@ def test_cancel_connect_host_releases_port(app: App) -> None:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    app._connect_worker("host", "127.0.0.1", port, True, attempt_queue, cancel)
+    app._connect_worker("host", "127.0.0.1", port, None, True, attempt_queue, cancel)
     assert attempt_queue.empty()
     # porta liberada: um novo servidor sobe na mesma porta sem EADDRINUSE
     server = GameServer(host="127.0.0.1", port=port)
@@ -723,7 +724,15 @@ def test_cancel_after_connect_closes_client_and_publishes_nothing(
     cancel = threading.Event()
 
     class StubClient:
-        def connect(self, host: str, port: int, nickname: str, timeout: float = 5.0) -> None:
+        def connect_auto(
+            self,
+            host: str,
+            *,
+            tcp_port: int | None,
+            ws_port: int | None,
+            nickname: str,
+            timeout: float = 5.0,
+        ) -> None:
             cancel.set()
 
         def close(self) -> None:
@@ -731,7 +740,7 @@ def test_cancel_after_connect_closes_client_and_publishes_nothing(
 
     monkeypatch.setattr("codecon_amoung_us.ui.app.GameClient", StubClient)
     attempt_queue: queue.SimpleQueue[object] = queue.SimpleQueue()
-    app._connect_worker("nick", "127.0.0.1", 1, False, attempt_queue, cancel)
+    app._connect_worker("nick", "127.0.0.1", 1, None, False, attempt_queue, cancel)
     assert closed == [True]
     assert attempt_queue.empty()
 
@@ -880,3 +889,66 @@ def test_settings_screen_opens_from_main_menu(app: App) -> None:
     app._back_to_main()
     assert app.screen_name == "main"
     assert app._current_menu is app.menu_main
+
+
+# ------------------------------------------------- descoberta LAN (UI)
+
+
+def test_join_discovered_connects_via_websocket(app: App) -> None:
+    """Selecionar uma partida descoberta conecta sem digitar IP, via WS."""
+    import time as _time
+
+    from codecon_amoung_us.config import GameConfig
+    from codecon_amoung_us.net.discovery import DiscoveredGame
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        ws_port = probe.getsockname()[1]
+    server = GameServer(host="127.0.0.1", port=0, config=GameConfig(ws_port=ws_port))
+    server.start()
+    try:
+        game = DiscoveredGame(
+            ip="127.0.0.1",
+            host_name="dono",
+            players=1,
+            max_players=10,
+            tcp_port=server.port,
+            ws_port=ws_port,
+        )
+        app._join_discovered("player", game)
+        deadline = _time.monotonic() + 8.0
+        while _time.monotonic() < deadline and app.connection_state is ConnectionState.CONNECTING:
+            app._poll_connection()
+            _time.sleep(0.01)
+        assert app.connection_state is ConnectionState.CONNECTED
+        assert app.client is not None
+        assert app.client.transport == "ws"
+        assert app.screen_name == "lobby"
+    finally:
+        app._shutdown_connection()
+        server.stop()
+
+
+def test_create_game_starts_ws_and_shows_network_info(app: App) -> None:
+    """Host embutido sobe TCP+WS (porta adjacente) e o lobby mostra a rede."""
+    import time as _time
+
+    app.nickname_input.set_value("dono")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    app.port_input.set_value(str(port))
+    app._create_game()
+    deadline = _time.monotonic() + 8.0
+    while _time.monotonic() < deadline and app.connection_state is ConnectionState.CONNECTING:
+        app._poll_connection()
+        _time.sleep(0.01)
+    try:
+        assert app.connection_state is ConnectionState.CONNECTED
+        assert app.is_host
+        assert app.server is not None
+        assert app.server.ws_port == port + 1
+        app._refresh_lobby()
+        assert f":{app.server.port}" in app.lobby_net_label.get_title()
+    finally:
+        app._shutdown_connection()

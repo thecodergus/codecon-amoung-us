@@ -202,6 +202,11 @@ class GameServer:
 
     # ------------------------------------------------------------------ lifecycle
 
+    @property
+    def ws_port(self) -> int | None:
+        """Porta efetiva do listener WebSocket (None quando desligado)."""
+        return self._ws_listener.port if self._ws_listener is not None else None
+
     def start(self) -> None:
         """Inicia listener e game loop (idempotente)."""
         if self._listener is not None:

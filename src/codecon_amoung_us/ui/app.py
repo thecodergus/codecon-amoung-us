@@ -9,22 +9,25 @@ from __future__ import annotations
 import math
 import os
 import queue
+import socket
 import tempfile
 import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from functools import partial
 from typing import Any, cast
 
 import pygame
 import pygame_menu
 
-from ..config import default_assets_dir, default_map_path
+from ..config import GameConfig, default_assets_dir, default_map_path
 from ..game.model import Role
 from ..map.loader import load_map
 from ..map.model import GameMap
 from ..net.client import GameClient
+from ..net.discovery import DiscoveredGame, discover_games
 from ..net.server import GameServer
 from ..protocol import (
     ActionAccepted,
@@ -93,6 +96,7 @@ class Screen(StrEnum):
     MAIN = "main"
     HOST = "host"
     JOIN = "join"
+    DISCOVER = "discover"
     LOBBY = "lobby"
     CONNECTING = "connecting"
     GAME = "game"
@@ -174,6 +178,16 @@ def _movement_direction(keys: Sequence[bool]) -> tuple[float, float] | None:
         return None
     length = math.hypot(dx, dy)
     return dx / length, dy / length
+
+
+def _local_ip() -> str:
+    """IP local da interface de saída (UDP ``connect`` não envia pacotes)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 80))  # TEST-NET-1: destino nunca roteado
+            return str(sock.getsockname()[0])
+    except OSError:
+        return "indisponível"
 
 
 def _menu_theme() -> pygame_menu.Theme:
@@ -296,7 +310,11 @@ class App:
         self.menu_join = self._build_join_menu()
         self.menu_settings = self._build_settings_menu()
         self.lobby_menu = self._build_lobby_menu()
+        self.menu_discover: pygame_menu.Menu | None = None
         self._current_menu: pygame_menu.Menu | None = None
+        # descoberta LAN: fila/thread por busca (mesmo padrão do connect worker)
+        self._discovery_queue: queue.SimpleQueue[tuple[str, list[DiscoveredGame]]] | None = None
+        self._discovery_thread: threading.Thread | None = None
         # controles persistentes por tela: hover/pressed e foco sobrevivem
         # entre frames (botões não são reconstruídos a cada render)
         self._lobby_ui_state: tuple[list[Button], FocusManager] | None = None
@@ -340,6 +358,11 @@ class App:
         menu = pygame_menu.Menu("Criar partida", WINDOW_W, WINDOW_H, theme=self._theme)
         self.nickname_input = menu.add.text_input("Apelido: ", default="host", maxchar=12)
         self.port_input = menu.add.text_input("Porta: ", default="5555", maxchar=5)
+        menu.add.label(f"IP nesta rede: {_local_ip()}", font_color=COLOR_TEXT_DIM)
+        menu.add.label(
+            "A partida aparece automaticamente na busca da rede.",
+            font_color=COLOR_TEXT_DIM,
+        )
         menu.add.button("Iniciar servidor", self._create_game)
         menu.add.button("Voltar", self._back_to_main)
         return menu
@@ -350,6 +373,7 @@ class App:
         self.join_ip = menu.add.text_input("Servidor: ", default="127.0.0.1", maxchar=64)
         self.join_port = menu.add.text_input("Porta: ", default="5555", maxchar=5)
         menu.add.button("Entrar", self._join_game)
+        menu.add.button("Buscar partidas na rede", self._open_discover)
         menu.add.button("Voltar", self._back_to_main)
         return menu
 
@@ -375,6 +399,7 @@ class App:
         # retorno de add.label (sem stubs/declaração); mantido enquanto o
         # pacote não fornece tipos (diretriz: sem Any generalizado).
         self.lobby_list_label = cast(Any, menu.add.label(""))
+        self.lobby_net_label = cast(Any, menu.add.label(""))
         self.lobby_warning_label = cast(Any, menu.add.label(""))
         menu.add.button("Iniciar (host)", self._start_game)
         menu.add.button("Sair", self._leave_lobby)
@@ -389,6 +414,76 @@ class App:
     def _open_join(self) -> None:
         self.screen_name = Screen.JOIN
         self._current_menu = self.menu_join
+
+    def _open_discover(self) -> None:
+        """Busca partidas na LAN (UDP broadcast) sem bloquear a renderização."""
+        nickname = str(self.join_nickname.get_value()).strip() or "player"
+        self.screen_name = Screen.DISCOVER
+        self.menu_discover = self._build_discover_searching_menu()
+        self._current_menu = self.menu_discover
+        # Fila por tentativa: resultado de busca abandonada (Voltar) cai numa
+        # fila órfã e nunca é lido — mesmo padrão do worker de conexão.
+        self._discovery_queue = queue.SimpleQueue()
+        self._discovery_thread = threading.Thread(
+            target=self._discovery_worker,
+            args=(nickname, self._discovery_queue),
+            name="discover-worker",
+            daemon=True,
+        )
+        self._discovery_thread.start()
+
+    def _build_discover_searching_menu(self) -> pygame_menu.Menu:
+        menu = pygame_menu.Menu("Partidas na rede", WINDOW_W, WINDOW_H, theme=self._theme)
+        menu.add.label("Buscando partidas na rede local...", font_color=COLOR_TEXT_DIM)
+        menu.add.button("Voltar", self._open_join)
+        return menu
+
+    def _build_discover_results_menu(
+        self, nickname: str, games: list[DiscoveredGame]
+    ) -> pygame_menu.Menu:
+        menu = pygame_menu.Menu("Partidas na rede", WINDOW_W, WINDOW_H, theme=self._theme)
+        if not games:
+            menu.add.label("Nenhuma partida encontrada.", font_color=COLOR_TEXT_DIM)
+            menu.add.label(
+                "Confira se o host criou a partida; em Wi-Fi com isolamento",
+                font_color=COLOR_TEXT_DIM,
+            )
+            menu.add.label("de clientes, só a conexão por IP funciona.", font_color=COLOR_TEXT_DIM)
+        for game in games:
+            host_name = game.host_name or "?"
+            label = f"{host_name} — {game.ip} ({game.players}/{game.max_players})"
+            menu.add.button(label, partial(self._join_discovered, nickname, game))
+        menu.add.button("Buscar novamente", self._open_discover)
+        menu.add.button("Voltar", self._open_join)
+        return menu
+
+    @staticmethod
+    def _discovery_worker(
+        nickname: str, result_queue: queue.SimpleQueue[tuple[str, list[DiscoveredGame]]]
+    ) -> None:
+        """Worker: escuta os anúncios da LAN (bloqueante ~2,5s) e publica."""
+        result_queue.put((nickname, discover_games()))
+
+    def _poll_discovery(self) -> None:
+        """Consome o resultado da busca na thread gráfica (main loop)."""
+        if self.screen_name is not Screen.DISCOVER or self._discovery_queue is None:
+            return
+        try:
+            nickname, games = self._discovery_queue.get_nowait()
+        except queue.Empty:
+            return
+        self.menu_discover = self._build_discover_results_menu(nickname, games)
+        self._current_menu = self.menu_discover
+
+    def _join_discovered(self, nickname: str, game: DiscoveredGame) -> None:
+        """Conecta a uma partida descoberta: WS (padrão ouro), TCP fallback."""
+        self._start_connect_worker(
+            nickname=nickname,
+            tcp_port=game.tcp_port,
+            ws_port=game.ws_port,
+            host=False,
+            ip=game.ip,
+        )
 
     def _open_settings(self) -> None:
         self.screen_name = Screen.SETTINGS
@@ -412,7 +507,9 @@ class App:
         except ValueError:
             self._show_error("Porta inválida")
             return
-        self._start_connect_worker(nickname=nickname, port=port, host=True)
+        # WS (padrão ouro) na porta adjacente; a descoberta divulga ambas.
+        ws_port = port + 1 if port + 1 <= 65535 else None
+        self._start_connect_worker(nickname=nickname, tcp_port=port, ws_port=ws_port, host=True)
 
     def _join_game(self) -> None:
         nickname = str(self.join_nickname.get_value()).strip() or "player"
@@ -422,10 +519,20 @@ class App:
         except ValueError:
             self._show_error("Porta inválida")
             return
-        self._start_connect_worker(nickname=nickname, port=port, host=False, ip=ip)
+        # Mesma porta nos dois transportes: WS primeiro (padrão ouro); se o
+        # servidor falar só TCP cru, o fallback assume transparentemente.
+        self._start_connect_worker(
+            nickname=nickname, tcp_port=port, ws_port=port, host=False, ip=ip
+        )
 
     def _start_connect_worker(
-        self, *, nickname: str, port: int, host: bool, ip: str = "127.0.0.1"
+        self,
+        *,
+        nickname: str,
+        tcp_port: int,
+        ws_port: int | None,
+        host: bool,
+        ip: str = "127.0.0.1",
     ) -> None:
         """Inicia a conexão em thread; a UI continua renderizando."""
         self.connection_state = ConnectionState.CONNECTING
@@ -438,7 +545,15 @@ class App:
         self._connection_cancel = threading.Event()
         self._connection_thread = threading.Thread(
             target=self._connect_worker,
-            args=(nickname, ip, port, host, self._connection_queue, self._connection_cancel),
+            args=(
+                nickname,
+                ip,
+                tcp_port,
+                ws_port,
+                host,
+                self._connection_queue,
+                self._connection_cancel,
+            ),
             name="connect-worker",
             daemon=True,
         )
@@ -448,7 +563,8 @@ class App:
         self,
         nickname: str,
         ip: str,
-        port: int,
+        tcp_port: int,
+        ws_port: int | None,
         host: bool,
         attempt_queue: queue.SimpleQueue[object],
         cancel: threading.Event,
@@ -464,17 +580,30 @@ class App:
         client = GameClient()
         try:
             if host:
+                config = GameConfig(ws_port=ws_port) if ws_port is not None else GameConfig()
                 # Bind em todas as interfaces: partidas em LAN (mesma rede)
                 # dependem de aceitar conexões de outros hosts; o cliente
                 # local continua conectando em 127.0.0.1.
-                server = GameServer(host="0.0.0.0", port=port)
-                server.start()
-                port = server.port
+                server = GameServer(host="0.0.0.0", port=tcp_port, config=config)
+                try:
+                    server.start()
+                except OSError:
+                    if ws_port is None:
+                        raise
+                    # Porta WS adjacente ocupada: sobe só com TCP (fallback)
+                    # em vez de derrubar a criação da partida.
+                    server.stop()
+                    server = GameServer(host="0.0.0.0", port=tcp_port)
+                    server.start()
+                tcp_port = server.port
+                ws_port = server.ws_port  # efetivo (None se o fallback desligou o WS)
                 ip = "127.0.0.1"
                 if cancel.is_set():
                     server.stop()
                     return
-            client.connect(ip, port, nickname, timeout=5.0)
+            client.connect_auto(
+                ip, tcp_port=tcp_port, ws_port=ws_port, nickname=nickname, timeout=5.0
+            )
             if cancel.is_set():
                 client.close()
                 if server is not None:
@@ -693,6 +822,7 @@ class App:
                     self.running = False
             self._drain_network()
             self._poll_connection()
+            self._poll_discovery()
             self._update_transitions()
             self._render(self._translate_events(events))
             self._present()
@@ -762,7 +892,13 @@ class App:
                 self.screen_name = Screen.GAME
 
     def _render(self, events: list[pygame.event.Event]) -> None:
-        if self.screen_name in (Screen.MAIN, Screen.HOST, Screen.JOIN, Screen.SETTINGS):
+        if self.screen_name in (
+            Screen.MAIN,
+            Screen.HOST,
+            Screen.JOIN,
+            Screen.DISCOVER,
+            Screen.SETTINGS,
+        ):
             menu = self._current_menu
             if menu is not None:
                 menu.update(events)
@@ -790,6 +926,12 @@ class App:
         players = ", ".join(p.nickname for p in self.lobby_players) or "(vazio)"
         host_flag = " (host)" if self.is_host else ""
         self.lobby_list_label.set_title(f"Jogadores: {players}{host_flag}")
+        if self.is_host and self.server is not None:
+            ws = self.server.ws_port
+            ws_info = f" • WS: {ws}" if ws is not None else ""
+            self.lobby_net_label.set_title(f"Rede: {_local_ip()}:{self.server.port}{ws_info}")
+        else:
+            self.lobby_net_label.set_title("")
 
     @staticmethod
     def _apply_focus(buttons: list[Button], focus: FocusManager) -> None:

@@ -11,6 +11,7 @@ import os
 
 import pytest
 
+from codecon_amoung_us.net.discovery import DiscoveredGame
 from codecon_amoung_us.ui.app import App, Screen
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -21,6 +22,28 @@ pytestmark = pytest.mark.ui
 @pytest.fixture(scope="module")
 def app() -> App:
     return App()
+
+
+def test_discover_screens_render(app: App) -> None:
+    """Telas de descoberta (buscando / resultados / vazio) renderizam sem rede."""
+    app.screen_name = Screen.DISCOVER
+    app._current_menu = app._build_discover_searching_menu()
+    app._render([])
+    games = [
+        DiscoveredGame(
+            ip="192.168.0.10",
+            host_name="ana",
+            players=3,
+            max_players=10,
+            tcp_port=5555,
+            ws_port=5556,
+        )
+    ]
+    app._current_menu = app._build_discover_results_menu("player", games)
+    app._render([])
+    app._current_menu = app._build_discover_results_menu("player", [])
+    app._render([])
+    app._back_to_main()
 
 
 def test_app_boots_and_renders_every_screen(app: App) -> None:
