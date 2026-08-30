@@ -31,6 +31,9 @@ size_t: TypeAlias = builtins.int
 double: TypeAlias = builtins.float
 float: TypeAlias = builtins.float
 bint: TypeAlias = builtins.bool
+char: TypeAlias = builtins.int
+uchar: TypeAlias = builtins.int
+schar: TypeAlias = builtins.int
 
 # --- Decoradores de função/classe (identidade no interpretador) ---
 def cfunc(__func: _F) -> _F: ...

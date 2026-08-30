@@ -21,6 +21,7 @@ from pathlib import Path
 import pygame
 
 from ..config import DUCKEE_DIRNAME, default_models_dir
+from ._native_pixels import apply_background_removal
 
 __all__ = ["DUCKEE_COLORS", "PlayerAnim", "color_for", "DuckeeSprites"]
 
@@ -66,9 +67,21 @@ def _frame_filename(anim: PlayerAnim, index: int) -> str:
     return f"duckee_{base}{index + 1}.png"
 
 
-def _rgb(pixel: pygame.Color) -> tuple[int, int, int]:
-    """Cor RGB de um pixel (get_at retorna Color; evita slices de tupla)."""
-    return (pixel.r, pixel.g, pixel.b)
+def _border_background(data: bytearray, w: int, h: int) -> tuple[int, int, int]:
+    """Cor de fundo = cor RGB dominante na borda do frame (varia por cor/variante)."""
+    border: Counter[tuple[int, int, int]] = Counter()
+    stride = w * 4
+    for x in range(w):
+        i = x * 4
+        border[(data[i], data[i + 1], data[i + 2])] += 1
+        j = (h - 1) * stride + x * 4
+        border[(data[j], data[j + 1], data[j + 2])] += 1
+    for y in range(h):
+        i = y * stride
+        border[(data[i], data[i + 1], data[i + 2])] += 1
+        j = y * stride + (w - 1) * 4
+        border[(data[j], data[j + 1], data[j + 2])] += 1
+    return border.most_common(1)[0][0]
 
 
 class DuckeeSprites:
@@ -94,52 +107,32 @@ class DuckeeSprites:
 
     @staticmethod
     def _load_frame(path: Path) -> pygame.Surface:
-        """Carrega um frame: remove o fundo preto e corta o bbox do sprite."""
+        """Carrega um frame: remove o fundo e corta o bbox do sprite.
+
+        Os passes por pixel (flood fill do fundo, remoção de alpha e
+        bounding box) rodam no kernel ``_native_pixels`` sobre um buffer
+        RGBA contíguo — bytecode Python só na borda e na cola com pygame.
+        """
         if not path.is_file():
             raise FileNotFoundError(f"sprite não encontrado: {path}")
         # Sem convert_alpha(): não exige video mode (funciona com SDL dummy).
         raw = pygame.image.load(str(path))
+        # Os PNGs paleta 8-bit trazem colorkey preto; get_at (algoritmo
+        # original) ignora colorkey, mas o blit o aplicaria como alpha 0.
+        # Limpar a chave mantém o blit byte a byte equivalente ao get_at.
+        raw.set_colorkey(None)
         w, h = raw.get_size()
-        # cor de fundo = cor dominante na borda do frame (varia por cor/variante)
-        border: Counter[tuple[int, int, int]] = Counter()
-        for x in range(w):
-            border[_rgb(raw.get_at((x, 0)))] += 1
-            border[_rgb(raw.get_at((x, h - 1)))] += 1
-        for y in range(h):
-            border[_rgb(raw.get_at((0, y)))] += 1
-            border[_rgb(raw.get_at((w - 1, y)))] += 1
-        background = border.most_common(1)[0][0]
-        # marca o fundo alcançável a partir da borda (flood fill por cor exata)
-        reachable = [[False] * w for _ in range(h)]
-        stack: list[tuple[int, int]] = []
-        for x in range(w):
-            stack.extend([(x, 0), (x, h - 1)])
-        for y in range(h):
-            stack.extend([(0, y), (w - 1, y)])
-        while stack:
-            x, y = stack.pop()
-            if not (0 <= x < w and 0 <= y < h) or reachable[y][x]:
-                continue
-            reachable[y][x] = True
-            if _rgb(raw.get_at((x, y))) != background:
-                continue
-            stack.extend([(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)])
-        out = pygame.Surface((w, h), pygame.SRCALPHA)
-        for y in range(h):
-            for x in range(w):
-                if not reachable[y][x]:
-                    out.set_at((x, y), raw.get_at((x, y)))
-        # bounding box não-transparente
-        minx, miny, maxx, maxy = w, h, -1, -1
-        for y in range(h):
-            for x in range(w):
-                if out.get_at((x, y))[3] > 0:
-                    minx = min(minx, x)
-                    miny = min(miny, y)
-                    maxx = max(maxx, x)
-                    maxy = max(maxy, y)
-        if maxx < 0:
+        # Normaliza para RGBA 32-bit: layout de buffer conhecido (w*4 por
+        # linha) para o kernel, independente do formato do PNG.
+        work = pygame.Surface((w, h), pygame.SRCALPHA)
+        work.blit(raw, (0, 0))
+        data = bytearray(pygame.image.tostring(work, "RGBA"))
+        background = _border_background(data, w, h)
+        bbox = apply_background_removal(data, w, h, *background)
+        out = pygame.image.fromstring(bytes(data), (w, h), "RGBA")
+        if bbox is None:
             return out
+        minx, miny, maxx, maxy = bbox
         cropped = out.subsurface((minx, miny, maxx - minx + 1, maxy - miny + 1)).copy()
         return pygame.transform.scale(
             cropped, (cropped.get_width() * _SCALE, cropped.get_height() * _SCALE)

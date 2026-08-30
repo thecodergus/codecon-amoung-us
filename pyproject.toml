@@ -59,6 +59,16 @@ mypy_path = ["src", "typings"]
 exclude = "^setup\\.py$"
 show_error_codes = true
 
+[[tool.mypy.overrides]]
+# Módulos-kernel Cython: subscrições de memoryview (cython.uchar[::1],
+# cython.double[::1]) não são representáveis no stub (typings/cython.pyi) —
+# o corpo desses módulos é verificado por equivalência de runtime, não pelo mypy.
+module = [
+    "codecon_amoung_us.ui._native_pixels",
+    "codecon_amoung_us.game._native_collision",
+]
+disable_error_code = ["index", "misc"]
+
 [tool.coverage.run]
 source = ["codecon_amoung_us"]
 branch = true
