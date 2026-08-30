@@ -52,7 +52,20 @@ def _extension_modules() -> list[Extension]:
     return modules
 
 
+def _remove_stale_excluded_extensions() -> None:
+    """Remove ``.so`` in-place de stems excluídos (resíduo de quando eram compilados).
+
+    Mesmo princípio da limpeza do modo ``SKIP_NATIVE``: um ``.so`` residual de
+    stem excluído continuaria ganhando do ``.py`` na importação para sempre,
+    executando código potencialmente divergente do fonte revisado.
+    """
+    for stale in _PACKAGE.rglob("*.cpython-*.so"):
+        if stale.name.split(".")[0] in _EXCLUDED_STEMS:
+            stale.unlink()
+
+
 ext_modules = []
+_remove_stale_excluded_extensions()
 if _SKIP_NATIVE:
     # Paridade real do modo puro: remove extensões in-place de builds anteriores
     # (artefatos gerados por este próprio script; gitignored). Sem isso, o .so
