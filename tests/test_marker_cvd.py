@@ -77,7 +77,12 @@ def _render_marker_pixels(app: App, state: TaskMarkerState) -> list[tuple[int, i
     camera.snap_to(half, half)
     marker = TaskMarkerView(task_id=1, x=half, y=half, state=state)
     app.renderer._draw_task_marker(surface, camera, marker, 0.0)
-    return [surface.get_at((x, y))[:3] for y in range(_CROP) for x in range(_CROP)]
+    pixels: list[tuple[int, int, int]] = []
+    for y in range(_CROP):
+        for x in range(_CROP):
+            color = surface.get_at((x, y))
+            pixels.append((color[0], color[1], color[2]))
+    return pixels
 
 
 def _mat_vec(matrix: tuple[tuple[float, float, float], ...], vec: list[float]) -> list[float]:
