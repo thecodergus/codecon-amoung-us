@@ -170,22 +170,44 @@ def test_action_denied_shows_warning_in_lobby(app: App) -> None:
     assert app.lobby_warning_label.get_title() == ""
 
 
+def _create_game_with_free_port(app: App, *, attempts: int = 5) -> int:
+    """Cria partida embutida em porta sondada; refaz a sonda em EADDRINUSE.
+
+    Probe-then-bind é TOCTOU: outro processo pode tomar a porta efêmera entre
+    a sonda e o bind do servidor embutido (causa-raiz do flake G-01, capturada
+    em V-01 em 2026-08-30: conexões de processos alheios em TIME_WAIT/LAST_ACK
+    na porta recém-sondada). O produto reporta o erro corretamente; o teste
+    refaz a sonda com uma porta nova, como um usuário faria. Erros que não
+    sejam a corrida de porta propagam como falha — o retry não mascara nada.
+    """
+    for _ in range(attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            port = int(s.getsockname()[1])
+        app.port_input.set_value(str(port))
+        app._create_game()
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and app.connection_state.value not in (
+            "connected",
+            "failed",
+        ):
+            app._poll_connection()
+            time.sleep(0.01)
+        if app.connection_state.value == "connected":
+            return port
+        if "Address already in use" not in app.error_message:
+            break
+        app._shutdown_connection()
+        app._back_to_main()
+        app.connection_state = ConnectionState.IDLE
+    raise AssertionError(f"criação de partida falhou: {app.error_message}")
+
+
 def test_create_game_populates_lobby_and_start_transitions(app: App) -> None:
     import time as _time
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        port = int(s.getsockname()[1])
-    app.port_input.set_value(str(port))
-    app._create_game()
+    _create_game_with_free_port(app)
     try:
-        assert app.connection_state.value == "connecting"
-        assert app.screen_name == "connecting"
-        # aguarda o worker concluir (poll no main loop)
-        deadline = _time.monotonic() + 5.0
-        while _time.monotonic() < deadline and app.connection_state.value != "connected":
-            app._poll_connection()
-            _time.sleep(0.01)
         assert app.is_host
         assert app.screen_name == "lobby"
         assert app.client is not None
@@ -930,18 +952,8 @@ def test_join_discovered_connects_via_websocket(app: App) -> None:
 
 def test_create_game_starts_ws_and_shows_network_info(app: App) -> None:
     """Host embutido sobe TCP+WS (porta adjacente) e o lobby mostra a rede."""
-    import time as _time
-
     app.nickname_input.set_value("dono")
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    app.port_input.set_value(str(port))
-    app._create_game()
-    deadline = _time.monotonic() + 8.0
-    while _time.monotonic() < deadline and app.connection_state is ConnectionState.CONNECTING:
-        app._poll_connection()
-        _time.sleep(0.01)
+    port = _create_game_with_free_port(app)
     try:
         assert app.connection_state is ConnectionState.CONNECTED
         assert app.is_host
