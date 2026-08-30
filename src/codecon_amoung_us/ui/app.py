@@ -1223,12 +1223,12 @@ class App:
         buttons[0].draw(self.screen)
         hint = self.font.render("ESC também volta ao menu", True, COLOR_TEXT_DIM)
         self.screen.blit(hint, hint.get_rect(center=layout.hint_center))
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_ESCAPE]:
-            self._exit_to_main()
         for event in events:
             focus.handle_event(event)
             buttons[0].handle_event(event)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self._exit_to_main()
+                return
 
     def _render_error(self, events: list[pygame.event.Event]) -> None:
         self.screen.fill(COLOR_BG)
@@ -1254,6 +1254,9 @@ class App:
         for event in events:
             focus.handle_event(event)
             buttons[0].handle_event(event)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self._back_to_main()
+                return
 
 
 def _wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:

@@ -22,7 +22,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame
 
 from codecon_amoung_us.game.meeting import MeetingReason
-from codecon_amoung_us.game.model import Role
+from codecon_amoung_us.game.model import Role, Team
 from codecon_amoung_us.net.client import GameClient
 from codecon_amoung_us.net.server import GameServer
 from codecon_amoung_us.protocol import (
@@ -30,11 +30,14 @@ from codecon_amoung_us.protocol import (
     ActionDenied,
     ActionKind,
     DenialCode,
+    GameOver,
+    LobbyPlayer,
     MeetingStarted,
+    PlayerInfo,
     ProtocolError,
 )
 from codecon_amoung_us.ui.app import App, ConnectionFailure, ConnectionState, _movement_direction
-from codecon_amoung_us.ui.components import Button
+from codecon_amoung_us.ui.components import Button, ButtonState
 from codecon_amoung_us.ui.viewmodel import VoteUiState
 
 pytestmark = pytest.mark.ui
@@ -644,3 +647,102 @@ def test_poll_ignores_result_after_cancel(app: App) -> None:
     app._connection_queue.put(ConnectionFailure(message="tarde"))
     app._poll_connection()
     assert app.connection_state is ConnectionState.IDLE
+
+
+# ---------------------------------------------------------------------------
+# Foco de teclado persistente nas telas customizadas
+# ---------------------------------------------------------------------------
+
+
+def _enter_lobby_screen(app: App, *, is_host: bool = True) -> None:
+    app.is_host = is_host
+    app.lobby_players = [LobbyPlayer(player_id=0, nickname="host")]
+    app.my_id = 0
+    app.host_id = 0
+    app.screen_name = "lobby"
+
+
+def test_lobby_focus_persists_between_frames(app: App, monkeypatch: pytest.MonkeyPatch) -> None:
+    """O índice de foco do lobby sobrevive à renderização (não é recriado)."""
+    monkeypatch.setattr(pygame.key, "get_mods", lambda: 0)
+    _enter_lobby_screen(app)
+    app._render_lobby([])
+    controls = app._lobby_ui_state
+    assert controls is not None
+    buttons, focus = controls
+    assert focus.index == 0
+    tab = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_TAB)
+    app._render_lobby([tab])
+    assert focus.index == 1  # o evento move o índice já neste frame
+    # frame seguinte sem eventos: o anel é aplicado ao segundo controle
+    app._render_lobby([])
+    assert focus.index == 1
+    assert buttons[1].focused is True
+    assert buttons[0].focused is False
+    # e persiste nos frames subsequentes
+    app._render_lobby([])
+    assert focus.index == 1
+    assert buttons[1].focused is True
+
+
+def test_lobby_focus_skips_disabled_start_for_non_host(app: App) -> None:
+    """Sem host, Iniciar fica disabled e o foco inicial cai em Sair."""
+    _enter_lobby_screen(app, is_host=False)
+    app._render_lobby([])
+    controls = app._lobby_ui_state
+    assert controls is not None
+    buttons, _focus = controls
+    assert buttons[0].state is ButtonState.DISABLED
+    assert buttons[0].focused is False
+    assert buttons[1].focused is True
+
+
+def test_enter_activates_persisted_focus(app: App, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Enter ativa o controle focado em um frame anterior (Sair -> menu)."""
+    monkeypatch.setattr(pygame.key, "get_mods", lambda: 0)
+    _enter_lobby_screen(app)
+    app._render_lobby([])
+    tab = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_TAB)
+    enter = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+    app._render_lobby([tab])
+    app._render_lobby([enter])
+    assert app.screen_name == "main"
+
+
+def test_custom_screens_have_keyboard_navigation(app: App, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tab/Enter/ESC têm comportamento definido nas telas customizadas."""
+    monkeypatch.setattr(pygame.key, "get_mods", lambda: 0)
+    enter = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+    escape = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+
+    # connecting: Cancelar focado; Enter cancela a tentativa
+    app.screen_name = "connecting"
+    app._render_connecting([])
+    buttons, _focus = app._single_ui_states["connecting"]
+    assert buttons[0].focused is True
+    app._render_connecting([enter])
+    assert app.screen_name == "main"
+
+    # game over: VOLTAR AO MENU focado; ESC volta ao menu (por evento)
+    app.game_over = GameOver(
+        winner=Team.CREW,
+        players=[PlayerInfo(player_id=0, nickname="a")],
+        roles={0: Role.CREW},
+    )
+    app.screen_name = "gameover"
+    app._render_gameover([])
+    buttons, _focus = app._single_ui_states["gameover"]
+    assert buttons[0].focused is True
+    app._render_gameover([escape])
+    assert app.screen_name == "main"
+
+    # error: Voltar focado; Enter e ESC voltam ao menu
+    app._show_error("falha de teste")
+    app._render_error([])
+    buttons, _focus = app._single_ui_states["error"]
+    assert buttons[0].focused is True
+    app._render_error([enter])
+    assert app.screen_name == "main"
+    app._show_error("outra falha")
+    app._render_error([escape])
+    assert app.screen_name == "main"
