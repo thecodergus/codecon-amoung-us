@@ -464,7 +464,10 @@ class App:
         client = GameClient()
         try:
             if host:
-                server = GameServer(host="127.0.0.1", port=port)
+                # Bind em todas as interfaces: partidas em LAN (mesma rede)
+                # dependem de aceitar conexões de outros hosts; o cliente
+                # local continua conectando em 127.0.0.1.
+                server = GameServer(host="0.0.0.0", port=port)
                 server.start()
                 port = server.port
                 ip = "127.0.0.1"
