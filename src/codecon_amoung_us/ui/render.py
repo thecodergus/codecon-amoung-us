@@ -24,6 +24,7 @@ from .camera import Camera2D
 from .components import ActionPrompt
 from .fonts import FontBook
 from .sprites import DuckeeSprites, color_for
+from .task_props import PROP_SIZE, TaskProps
 from .theme import HUD_HEIGHT, RADIUS, SPACING, TOKENS
 from .viewmodel import GameHudView, TaskMarkerState, TaskMarkerView
 
@@ -39,7 +40,6 @@ COLOR_ACCENT = (255, 122, 26)
 COLOR_CREW = (96, 196, 255)
 COLOR_IMPOSTOR = (242, 74, 74)
 COLOR_TASK = (255, 212, 92)
-COLOR_EMERGENCY = (255, 74, 74)
 COLOR_ME = (96, 210, 255)
 COLOR_BODY_X = (255, 70, 70)
 
@@ -91,6 +91,7 @@ class Renderer:
         self.font_med = self.fonts.body
         self.font_big = self.fonts.heading
         self.sprites = DuckeeSprites()
+        self.task_props = TaskProps()
         self._background = self._load_background()
         self._last_pos: dict[int, tuple[float, float]] = {}
         self._last_flip: dict[int, bool] = {}
@@ -121,8 +122,10 @@ class Renderer:
         surface: pygame.Surface,
         camera: Camera2D,
         markers: list[TaskMarkerView] | None = None,
+        *,
+        emergency_active: bool = False,
     ) -> None:
-        """Recorte da câmera da cena + marcadores de tarefa contextuais."""
+        """Recorte da câmera da cena + estações de tarefa (objetos do mundo)."""
         ox, oy = camera.offset()
         surface.blit(self._background, (0, 0), area=pygame.Rect(ox, oy, WORLD_WIDTH, WORLD_HEIGHT))
         ticks = pygame.time.get_ticks()
@@ -133,50 +136,72 @@ class Renderer:
         if self.game_map.emergency_meeting is not None:
             ex, ey = self.game_map.emergency_meeting
             if _in_view(camera, ex, ey):
-                # botão de reunião: anel estático (sem pulsação contínua)
                 sx, sy = camera.world_to_screen(ex, ey)
-                pygame.draw.circle(surface, COLOR_EMERGENCY, (int(sx), int(sy)), 14)
-                pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), 18, 2)
+                x, y = int(sx), int(sy)
+                sprite = self.task_props.sprite("emergency")
+                surface.blit(sprite, (x - PROP_SIZE // 2, y - PROP_SIZE // 2))
+                if emergency_active:
+                    self._draw_interaction_halo(surface, x, y, pulse)
+
+    @staticmethod
+    def _draw_bang(surface: pygame.Surface, x: int, y: int) -> None:
+        """Glifo "!" (signifier de ação disponível, desenhado sem fonte)."""
+        pygame.draw.rect(surface, (30, 26, 8), (x - 2, y - 8, 5, 10))
+        pygame.draw.circle(surface, (30, 26, 8), (x, y + 6), 3)
+        pygame.draw.rect(surface, (255, 224, 132), (x - 1, y - 7, 3, 8))
+        pygame.draw.circle(surface, (255, 224, 132), (x, y + 5), 2)
+
+    def _draw_interaction_halo(self, surface: pygame.Surface, x: int, y: int, pulse: float) -> None:
+        """Halo de interatividade: anel duplo pulsante + glifo "!" no canto."""
+        grow = int(3 * pulse)
+        rect = pygame.Rect(0, 0, PROP_SIZE - 4 + grow * 2, PROP_SIZE - 4 + grow * 2)
+        rect.center = (x, y)
+        pygame.draw.rect(surface, (255, 224, 132), rect, width=3, border_radius=8)
+        inner = rect.inflate(-8, -8)
+        pygame.draw.rect(surface, (255, 244, 190), inner, width=1, border_radius=6)
+        self._draw_bang(surface, x + PROP_SIZE // 2 - 6, y - PROP_SIZE // 2 + 6)
 
     def _draw_task_marker(
         self, surface: pygame.Surface, camera: Camera2D, marker: TaskMarkerView, pulse: float
     ) -> None:
-        if marker.state is TaskMarkerState.UNASSIGNED:
-            return  # discreta/invisível
         if not _in_view(camera, marker.x, marker.y):
             return  # fora do retângulo da câmera
         sx, sy = camera.world_to_screen(marker.x, marker.y)
         x, y = int(sx), int(sy)
+        # A estação é mobília do mundo: sempre visível; dim quando a tarefa
+        # não é sua (UNASSIGNED) ou já foi concluída (DONE).
+        dimmed = marker.state in (TaskMarkerState.UNASSIGNED, TaskMarkerState.DONE)
+        sprite = self.task_props.sprite(marker.task_type, dimmed=dimmed)
+        surface.blit(sprite, (x - PROP_SIZE // 2, y - PROP_SIZE // 2))
         if marker.state is TaskMarkerState.DONE:
-            pygame.draw.circle(surface, (62, 68, 84), (x, y), 8)
-            pygame.draw.circle(surface, (90, 96, 116), (x, y), 8, 2)
-            # check desaturado
+            # badge de check verde (luminância alta + geometria própria)
+            cx, cy = x + PROP_SIZE // 2 - 10, y + PROP_SIZE // 2 - 10
+            pygame.draw.circle(surface, (16, 60, 28), (cx, cy), 8)
+            pygame.draw.circle(surface, (120, 230, 130), (cx, cy), 8, 2)
             pygame.draw.lines(
-                surface, (90, 96, 116), False, [(x - 4, y), (x - 1, y + 4), (x + 5, y - 4)], 2
+                surface,
+                (120, 230, 130),
+                False,
+                [(cx - 4, cy), (cx - 1, cy + 3), (cx + 4, cy - 3)],
+                2,
             )
             return
-        # Estados ativos: losango (forma própria — nunca só cor). NEAR ganha
-        # um anel externo; INTERACTABLE é preenchido, pulsa e mostra "!".
         if marker.state is TaskMarkerState.INTERACTABLE:
-            radius = 10 + int(4 * pulse if marker.pulse else 0)
-            points = [(x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)]
-            pygame.draw.polygon(surface, (255, 224, 132), points)
-            pygame.draw.polygon(surface, (30, 26, 8), points, 2)
-            # glifo "!" (signifier de ação disponível, desenhado sem fonte)
-            pygame.draw.rect(surface, (30, 26, 8), (x - 1, y - radius // 2, 3, radius // 2 + 1))
-            pygame.draw.circle(surface, (30, 26, 8), (x, y + radius // 2 - 1), 2)
+            self._draw_interaction_halo(surface, x, y, pulse)
             return
         if marker.state is TaskMarkerState.NEAR:
-            radius = 8
-            points = [(x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)]
-            pygame.draw.polygon(surface, (24, 28, 40), points)
-            pygame.draw.polygon(surface, (255, 224, 132), points, 2)
-            pygame.draw.circle(surface, (255, 224, 132), (x, y), radius + 5, 2)
+            # aproximação: contorno fino (sem pulsação)
+            rect = pygame.Rect(0, 0, PROP_SIZE - 4, PROP_SIZE - 4)
+            rect.center = (x, y)
+            pygame.draw.rect(surface, (255, 224, 132), rect, width=1, border_radius=8)
             return
-        radius = 7
-        points = [(x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)]
-        pygame.draw.polygon(surface, (24, 28, 40), points)
-        pygame.draw.polygon(surface, COLOR_TASK, points, 2)
+        if marker.state is TaskMarkerState.ASSIGNED:
+            # tag amarela estática no topo da estação ("tem tarefa sua aqui")
+            tx, ty = x, y - PROP_SIZE // 2 + 6
+            points = [(tx, ty - 5), (tx + 5, ty), (tx, ty + 5), (tx - 5, ty)]
+            pygame.draw.polygon(surface, (30, 26, 8), points)
+            points = [(tx, ty - 4), (tx + 4, ty), (tx, ty + 4), (tx - 4, ty)]
+            pygame.draw.polygon(surface, (255, 224, 132), points)
 
     # ------------------------------------------------------------- jogadores
 

@@ -925,7 +925,14 @@ class App:
             tasks_state=self.tasks_state,
             me=me,
         )
-        self.renderer.draw_map(self.screen, self.camera, markers)
+        # halo de interatividade do botão de emergência (jogador vivo no raio)
+        emergency_active = False
+        if me is not None and me.alive and self.game_map.emergency_meeting is not None:
+            ex, ey = self.game_map.emergency_meeting
+            emergency_active = (
+                math.hypot(ex - me.x, ey - me.y) <= self.game_map.emergency_meeting_radius
+            )
+        self.renderer.draw_map(self.screen, self.camera, markers, emergency_active=emergency_active)
         if snapshot is not None and self.my_id is not None:
             self.renderer.draw_bodies(self.screen, self.camera, snapshot.bodies)
             self.renderer.draw_players(
