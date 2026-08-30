@@ -21,9 +21,9 @@ from pathlib import Path
 
 from ..config import MAX_PLAYERS, PROTOCOL_VERSION, GameConfig
 from ..framing import FrameDecoder, FrameError, encode_frame
+from ..game._native_collision import FlatWalls, flatten_walls, resolve_movement_steps_flat
 from ..game.meeting import Meeting, MeetingOutcome, MeetingReason
 from ..game.model import GameState, Phase, PlayerState, Role, Task
-from ..game.physics import resolve_movement_steps
 from ..game.rules import apply_kill, can_report, check_win, complete_task
 from ..game.tasks import assign_tasks
 from ..map.loader import load_map
@@ -158,6 +158,10 @@ class GameServer:
         else:
             self.config = config if config is not None else GameConfig()
         self._game_map: GameMap = load_map(self.config.resolve_map_path())
+        # Paredes achatadas uma única vez: o kernel de colisão
+        # (game/_native_collision.py, equivalência property-tested com
+        # game/physics.py) não toca objetos Rect no hot loop do tick.
+        self._flat_walls: FlatWalls = flatten_walls(self._game_map.walls)
 
         self._state = GameState(game_id="game-1")
         self._state.tasks = [
@@ -907,12 +911,12 @@ class GameServer:
                 continue
             step = self.config.player_speed * dt
             ux, uy = dx / length, dy / length
-            nx, ny = resolve_movement_steps(
+            nx, ny = resolve_movement_steps_flat(
                 player.x,
                 player.y,
                 ux * step,
                 uy * step,
-                self._game_map.walls,
+                self._flat_walls,
                 max_step=self.config.max_movement_step,
             )
             left, top, right, bottom = self._game_map.bounds()

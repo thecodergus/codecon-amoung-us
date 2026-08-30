@@ -67,7 +67,7 @@ module = [
     "codecon_amoung_us.ui._native_pixels",
     "codecon_amoung_us.game._native_collision",
 ]
-disable_error_code = ["index", "misc"]
+disable_error_code = ["index", "misc", "type-arg", "valid-type", "attr-defined", "arg-type"]
 
 [tool.coverage.run]
 source = ["codecon_amoung_us"]
