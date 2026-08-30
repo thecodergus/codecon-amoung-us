@@ -53,6 +53,8 @@ class AsteroidsLogic:
 
     def _spawn(self) -> None:
         side = self.rng.randrange(4)
+        x: float
+        y: float
         if side == 0:  # esquerda -> direita
             x, y = -_MARGIN, self.rng.uniform(0, CONTENT_H)
         elif side == 1:  # direita -> esquerda

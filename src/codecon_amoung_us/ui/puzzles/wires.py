@@ -115,6 +115,7 @@ class WiresMinigame(Minigame):
         logic = self.logic
         for wire, color in enumerate(WIRE_COLORS):
             start = (ox + _LEFT_X, oy + _node_y(wire))
+            end: tuple[float, float]
             if wire in logic.connections:
                 end = (ox + _RIGHT_X, oy + _node_y(logic.connections[wire]))
                 pygame.draw.line(surface, color, start, end, 6)
