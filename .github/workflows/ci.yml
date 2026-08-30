@@ -41,9 +41,10 @@ jobs:
       - name: smoke multiplayer E2E
         run: uv run python scripts/smoke_multiplayer.py
 
-      - name: uv audit (informativo)
+      # Gate bloqueante (A-07): baseline limpo em V-03 (2026-08-30, 27 pacotes,
+      # zero advisories) — advisory novo passa a falhar o CI.
+      - name: uv audit
         run: uv audit
-        continue-on-error: true
 
   test-pure:
     name: Paridade modo puro (sem extensões Cython)
