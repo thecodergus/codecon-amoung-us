@@ -39,20 +39,24 @@ def test_centering_away_from_borders(camera: Camera2D) -> None:
     assert (sx, sy) == pytest.approx((VIEWPORT[0] / 2, VIEWPORT[1] / 2))
 
 
-def test_clamp_left_top(camera: Camera2D) -> None:
-    camera.snap_to(32.0, 32.0)  # jogador colado no canto (0, 0)
-    assert camera.offset() == (0, 0)
-    _simulate(camera, (32.0, 32.0), 1 / 60, 120)
-    assert camera.offset() == (0, 0)
-    # nenhuma área negativa é exibida
-    assert camera.screen_to_world(0.0, 0.0) == (0.0, 0.0)
-
-
-def test_clamp_right_bottom(camera: Camera2D) -> None:
-    camera.snap_to(2528.0, 1376.0)  # jogador colado no canto oposto
-    assert camera.offset() == (2560 - 1280, 1408 - 704)
-    _simulate(camera, (2528.0, 1376.0), 1 / 60, 120)
-    assert camera.offset() == (2560 - 1280, 1408 - 704)
+@pytest.mark.parametrize(
+    ("player", "expected_offset"),
+    [
+        ((32.0, 32.0), (0, 0)),  # canto superior esquerdo
+        ((2528.0, 32.0), (2560 - 1280, 0)),  # canto superior direito
+        ((32.0, 1376.0), (0, 1408 - 704)),  # canto inferior esquerdo
+        ((2528.0, 1376.0), (2560 - 1280, 1408 - 704)),  # canto inferior direito
+    ],
+)
+def test_clamp_corners(
+    camera: Camera2D, player: tuple[float, float], expected_offset: tuple[int, int]
+) -> None:
+    camera.snap_to(*player)
+    assert camera.offset() == expected_offset
+    _simulate(camera, player, 1 / 60, 120)
+    assert camera.offset() == expected_offset
+    # nenhuma área fora do mapa é exibida
+    assert camera.screen_to_world(0.0, 0.0) == expected_offset
 
 
 def test_snap_initializes_on_player(camera: Camera2D) -> None:
