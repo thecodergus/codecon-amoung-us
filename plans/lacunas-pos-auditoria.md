@@ -1,10 +1,11 @@
 # Plano: fechamento das lacunas pós-auditoria (rastreabilidade + verificações)
 
-Status: **em execução** (build agent, 2026-08-30). Origem: auditoria técnica da
-implementação "mundo triplicado + 7 minigames" (veredito: 5 VERIFICADO + 6
-VERIFICADO COM RESSALVAS; 0 CONTRADITO; 3 achados Baixa + 4 verificações
-pendentes). Nenhum defeito funcional confirmado — as lacunas são de
-rastreabilidade científica, fidelidade documental e verificações não executadas.
+Status: **executado com 1 pendência externa** (build agent, 2026-08-30).
+A-01/A-02/A-03/A-05/A-06/A-07 entregues e verificadas; A-04 (smoke manual)
+permanece bloqueada por dependência de display+operador humano — condição de
+desbloqueio explícita abaixo. Origem: auditoria técnica da implementação
+"mundo triplicado + 7 minigames" (veredito: 5 VERIFICADO + 6 VERIFICADO COM
+RESSALVAS; 0 CONTRADITO; 3 achados Baixa + 4 verificações pendentes).
 
 ## Diagnóstico (16 itens avaliados)
 
@@ -21,13 +22,28 @@ rastreabilidade científica, fidelidade documental e verificações não executa
 
 | ID   | Lacuna                                                        | Ação | Prioridade | Status |
 | ---- | ------------------------------------------------------------- | ---- | ---------- | ------ |
-| G-01 | Citações "Xiao & Yang 2025"/"Kamath et al. 2025" não localizáveis; Xbox AG/Norman não re-lidos | A-01 | P2 | pendente |
-| G-02 | Paleta Okabe-Ito prevista não aplicada; desvio não registrado | A-02 | P3 | pendente |
-| G-03 | Critério "basedpyright strict verde" não literal (22 erros preexistentes) | A-03 | P3 | pendente |
-| G-04 | Smoke manual não executado (depende de display+operador)      | A-04 | P2 | **bloqueado externo** |
-| G-05 | Nº exato de células caminháveis (1026) não re-derivado        | A-05 | P3 | pendente |
-| G-06 | Marcadores não validados sob simulação de daltonismo          | A-06 | P3 | pendente |
-| G-07 | 7 módulos de puzzle sem inspeção linha-a-linha                | A-07 | P3 | pendente |
+| G-01 | Citações "Xiao & Yang 2025"/"Kamath et al. 2025" não localizáveis; Xbox AG/Norman não re-lidos | A-01 | P2 | **resolvido** (citações substituídas por fontes verificadas; Mortazavi 2024 marcada como metadados-somente) |
+| G-02 | Paleta Okabe-Ito prevista não aplicada; desvio não registrado | A-02 | P3 | **resolvido** (desvio registrado no cabeçalho do plano do mapa) |
+| G-03 | Critério "basedpyright strict verde" não literal (22 erros preexistentes) | A-03 | P3 | **resolvido** (critério efetivo documentado) |
+| G-04 | Smoke manual não executado (depende de display+operador)      | A-04 | P2 | **bloqueado externo** — condição de desbloqueio abaixo |
+| G-05 | Nº exato de células caminháveis (1026) não re-derivado        | A-05 | P3 | **resolvido** (re-derivado: 1026, componente único, 0 fora) |
+| G-06 | Marcadores não validados sob simulação de daltonismo          | A-06 | P3 | **resolvido** (`tests/test_marker_cvd.py`, 4 testes verdes) |
+| G-07 | 7 módulos de puzzle sem inspeção linha-a-linha                | A-07 | P3 | **resolvido** (`tests/test_puzzle_invariants.py`, 26 testes verdes + checklist abaixo) |
+
+### Checklist A-07 registrado (evidência por módulo)
+
+| Item | wires | fix_wiring | swipe_card | calibrate | clean_filter | start_reactor | asteroids |
+| ---- | ----- | ---------- | ---------- | --------- | ------------ | ------------- | --------- |
+| Consome `difficulty_for` | não* | não* | sim | sim | sim | sim | sim |
+| Respeita `reduced_motion` | sim | sim | sim | sim | sim | sim | sim |
+| Determinismo por seed (teste) | sim | sim | sim (factory) | sim (factory) | sim (factory) | sim | sim |
+| Sem estado mutável de classe | sim | sim | sim | sim | sim | sim | sim |
+| Input posicional valida área | sim | sim | n/a (timing) | n/a (timing) | sim | sim | sim |
+
+\* wires (4 fios fixos) e fix_wiring (grade 3×3 fixa) têm estrutura fixa por
+design; os parâmetros de dificuldade existem no catálogo (mensuráveis) mas
+não são consumidos — registrado como observação, não como desvio (mudar
+exigiria alterar gameplay e baselines sem pedido do usuário).
 
 ## Fase 1 — Rastreabilidade + verificação central (P2)
 
@@ -121,14 +137,19 @@ rastreabilidade científica, fidelidade documental e verificações não executa
   parametrização estática de dificuldade em minigames nem a feedback
   multimodal em puzzles de jogos sociais.
 
-## Verificação integrada final
+## Verificação integrada final — resultados (2026-08-30)
 
-1. `uv run ruff check .` limpo + `uv run ruff format --check .`.
-2. `uv run basedpyright .` — zero erros novos vs. baseline.
-3. `uv run pytest -q` completo (366 + novos testes) verde.
-4. `uv run python scripts/build_lab_map.py --check` verde.
-5. Commits por fase (conventional, sem push): docs(plans) → docs(plans) fase 2
-   → test(ui) A-06 → test(ui) A-07 → docs(plans) fechamento.
+1. `uv run ruff check .` → All checks passed; `ruff format` → 80 arquivos ok.
+2. `uv run basedpyright .` → 22 erros, idênticos ao baseline (uma regressão
+   introduzida durante a execução — anotação `logic: object` na ABC — foi
+   detectada por esta verificação e revertida no commit f5703e6).
+3. `uv run pytest -q -m "not slow"` → 361 passed; `-m "slow or integration
+   or e2e"` → 35 passed. Uma falha isolada num teste de integração lento não
+   se reproduziu em 2 re-execuções completas (flake preexistente, fora da
+   superfície alterada — nenhum arquivo de rede/protocolo foi tocado).
+4. `uv run python scripts/build_lab_map.py --check` → assets sincronizados.
+5. Commits: fa6139d (plano) → 599e8e2 (A-01/02/03/05) → d38df08 (A-06) →
+   77599be (A-07) → f5703e6 (fix typecheck) → fechamento docs.
 
 ## Definição global de concluído
 
