@@ -1,6 +1,9 @@
 # Plano — Fechamento do redesign de UI/UX, sigilo e QA final
 
-**Status:** em execução (2026-08-29)
+**Status:** executado (2026-08-29) — Fases 1–6 concluídas e commitadas; Fase 7
+(LAN real) aguarda execução em hardware pelo usuário (checklist atualizado em
+`checklist-ambiente-real.md`). Verificação final: ruff/format/mypy limpos,
+269 testes verdes, smoke multiplayer OK, 20 capturas auditadas.
 **Origem:** documento do usuário "Fechamento do redesign de UI/UX, sigilo e QA final" + investigação do repositório
 **Decisão-chave (registrada com o usuário):** contrato de sigilo = **formalizar o comportamento atual** (Opção A). Ver Fase 1.
 
