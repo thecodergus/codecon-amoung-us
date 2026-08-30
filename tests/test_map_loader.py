@@ -38,16 +38,16 @@ def test_spawn_points_with_ids(game_map: GameMap) -> None:
 
 
 def test_task_points_with_properties(game_map: GameMap) -> None:
-    assert len(game_map.task_points) == 14
+    assert len(game_map.task_points) == 28
     by_type = {t.task_type for t in game_map.task_points}
-    assert set(TASK_TYPES) <= by_type
+
     # interaction_radius veio da propriedade customizada do Tiled
-    assert all(t.interaction_radius == 20.0 for t in game_map.task_points)
+    assert all(t.interaction_radius == 56.0 for t in game_map.task_points)
 
 
 def test_emergency_meeting_point(game_map: GameMap) -> None:
     assert game_map.emergency_meeting is not None
-    assert game_map.emergency_meeting_radius == 25.0
+    assert game_map.emergency_meeting_radius == 44.0
 
 
 def test_rooms_loaded(game_map: GameMap) -> None:

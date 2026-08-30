@@ -10,7 +10,7 @@
   "tileheight": 64,
   "infinite": false,
   "nextlayerid": 7,
-  "nextobjectid": 75,
+  "nextobjectid": 89,
   "layers": [
     {
       "id": 1,
@@ -867,7 +867,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -890,7 +890,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -913,7 +913,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -936,7 +936,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -959,7 +959,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -982,7 +982,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1005,7 +1005,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1028,7 +1028,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1051,7 +1051,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1074,7 +1074,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1097,7 +1097,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1120,7 +1120,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1143,7 +1143,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1166,7 +1166,329 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 20.0
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 62,
+          "name": "task15",
+          "point": true,
+          "x": 416.0,
+          "y": 1056.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "wires"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 63,
+          "name": "task16",
+          "point": true,
+          "x": 672.0,
+          "y": 1184.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "fix_wiring"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 64,
+          "name": "task17",
+          "point": true,
+          "x": 3936.0,
+          "y": 1056.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "swipe_card"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 65,
+          "name": "task18",
+          "point": true,
+          "x": 1696.0,
+          "y": 2080.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "calibrate"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 66,
+          "name": "task19",
+          "point": true,
+          "x": 3872.0,
+          "y": 288.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "clean_filter"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 67,
+          "name": "task20",
+          "point": true,
+          "x": 3424.0,
+          "y": 480.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "start_reactor"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 68,
+          "name": "task21",
+          "point": true,
+          "x": 3616.0,
+          "y": 2016.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "asteroids"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 69,
+          "name": "task22",
+          "point": true,
+          "x": 2208.0,
+          "y": 1888.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "wires"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 70,
+          "name": "task23",
+          "point": true,
+          "x": 608.0,
+          "y": 1824.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "fix_wiring"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 71,
+          "name": "task24",
+          "point": true,
+          "x": 800.0,
+          "y": 1888.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "swipe_card"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 72,
+          "name": "task25",
+          "point": true,
+          "x": 4128.0,
+          "y": 2080.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "calibrate"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 73,
+          "name": "task26",
+          "point": true,
+          "x": 3936.0,
+          "y": 2144.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "clean_filter"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 74,
+          "name": "task27",
+          "point": true,
+          "x": 2464.0,
+          "y": 544.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "start_reactor"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 75,
+          "name": "task28",
+          "point": true,
+          "x": 2144.0,
+          "y": 352.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "asteroids"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
             }
           ],
           "visible": true,
@@ -1185,7 +1507,7 @@
       "draworder": "topdown",
       "objects": [
         {
-          "id": 62,
+          "id": 76,
           "name": "meeting_button",
           "point": true,
           "x": 2208.0,
@@ -1194,7 +1516,7 @@
             {
               "name": "interaction_radius",
               "type": "float",
-              "value": 25.0
+              "value": 44.0
             }
           ],
           "visible": true,
@@ -1213,7 +1535,7 @@
       "draworder": "topdown",
       "objects": [
         {
-          "id": 63,
+          "id": 77,
           "name": "medbay",
           "x": 192,
           "y": 192,
@@ -1223,7 +1545,7 @@
           "rotation": 0
         },
         {
-          "id": 64,
+          "id": 78,
           "name": "laboratorio",
           "x": 1152,
           "y": 128,
@@ -1233,7 +1555,7 @@
           "rotation": 0
         },
         {
-          "id": 65,
+          "id": 79,
           "name": "eletrica",
           "x": 2112,
           "y": 192,
@@ -1243,7 +1565,7 @@
           "rotation": 0
         },
         {
-          "id": 66,
+          "id": 80,
           "name": "navegacao",
           "x": 3200,
           "y": 128,
@@ -1253,7 +1575,7 @@
           "rotation": 0
         },
         {
-          "id": 67,
+          "id": 81,
           "name": "seguranca",
           "x": 256,
           "y": 896,
@@ -1263,7 +1585,7 @@
           "rotation": 0
         },
         {
-          "id": 68,
+          "id": 82,
           "name": "hub",
           "x": 1792,
           "y": 896,
@@ -1273,7 +1595,7 @@
           "rotation": 0
         },
         {
-          "id": 69,
+          "id": 83,
           "name": "oxigenio",
           "x": 3456,
           "y": 896,
@@ -1283,7 +1605,7 @@
           "rotation": 0
         },
         {
-          "id": 70,
+          "id": 84,
           "name": "reator",
           "x": 192,
           "y": 1792,
@@ -1293,7 +1615,7 @@
           "rotation": 0
         },
         {
-          "id": 71,
+          "id": 85,
           "name": "analise",
           "x": 1152,
           "y": 1856,
@@ -1303,7 +1625,7 @@
           "rotation": 0
         },
         {
-          "id": 72,
+          "id": 86,
           "name": "armazem",
           "x": 2112,
           "y": 1792,
@@ -1313,7 +1635,7 @@
           "rotation": 0
         },
         {
-          "id": 73,
+          "id": 87,
           "name": "motores",
           "x": 3072,
           "y": 1856,
@@ -1323,7 +1645,7 @@
           "rotation": 0
         },
         {
-          "id": 74,
+          "id": 88,
           "name": "comunicacao",
           "x": 3904,
           "y": 1792,

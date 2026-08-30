@@ -114,6 +114,22 @@ _TASKS: list[tuple[int, int]] = [
     (51, 3),  # navegacao
     (62, 29),  # comunicacao
     (55, 15),  # oxigenio
+    # Etapa 1 (28 estações, 4 por tipo): 14 pontos novos, todos validados
+    # contra os gates (caminhável, ≥1,5 célula de qualquer ponto, em sala).
+    (6, 16),  # seguranca
+    (10, 18),  # seguranca
+    (61, 16),  # oxigenio
+    (26, 32),  # analise
+    (60, 4),  # navegacao
+    (53, 7),  # navegacao
+    (56, 31),  # motores
+    (34, 29),  # armazem
+    (9, 28),  # reator
+    (12, 29),  # reator
+    (64, 32),  # comunicacao
+    (61, 33),  # comunicacao
+    (38, 8),  # eletrica
+    (33, 5),  # eletrica
 ]
 
 # ---------------------------------------------------------------------------
@@ -450,7 +466,7 @@ def build_lab_json(
                         "type": "string",
                         "value": _TASK_TYPES[index % len(_TASK_TYPES)],
                     },
-                    {"name": "interaction_radius", "type": "float", "value": 20.0},
+                    {"name": "interaction_radius", "type": "float", "value": 56.0},
                 ],
                 "visible": True,
                 "rotation": 0,
@@ -486,7 +502,7 @@ def build_lab_json(
                     "point": True,
                     "x": ex,
                     "y": ey,
-                    "properties": [{"name": "interaction_radius", "type": "float", "value": 25.0}],
+                    "properties": [{"name": "interaction_radius", "type": "float", "value": 44.0}],
                     "visible": True,
                     "rotation": 0,
                     "width": 0,
