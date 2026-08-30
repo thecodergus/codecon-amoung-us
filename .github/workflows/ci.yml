@@ -61,3 +61,27 @@ jobs:
 
       - name: Builder --check (assets == saída do gerador)
         run: uv run python scripts/build_lab_map.py --check
+
+  ui-xvfb:
+    name: UI sob X real (Xvfb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv + Python 3.13
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Instalar Xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Sync dependências
+        run: uv sync --frozen
+
+      # SDL_VIDEODRIVER=x11 é respeitado: os testes usam
+      # os.environ.setdefault("SDL_VIDEODRIVER", "dummy").
+      - name: pytest UI sob driver x11 (servidor X virtual)
+        run: xvfb-run -a uv run pytest tests/test_ui_components.py tests/test_ui_events.py tests/test_visual_regression.py tests/test_ui_smoke.py
+        env:
+          SDL_VIDEODRIVER: x11

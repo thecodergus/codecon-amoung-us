@@ -24,8 +24,6 @@ def app() -> App:
 
 
 def test_app_boots_and_renders_every_screen(app: App) -> None:
-    import pygame
-
     from codecon_amoung_us.game.meeting import MeetingReason
     from codecon_amoung_us.game.model import Role, Team
     from codecon_amoung_us.protocol import Ejected, GameOver, MeetingStarted, ProtocolError
@@ -87,4 +85,6 @@ def test_app_boots_and_renders_every_screen(app: App) -> None:
     app._handle_message(ProtocolError(code="x", message="y"))
 
     app._shutdown_connection()
-    pygame.quit()
+    # Sem pygame.quit() aqui: quit->init corrompe o cache global de fontes do
+    # pygame-menu e segfaulta o App() de módulos de teste posteriores (mesma
+    # nota de tests/test_ui_events.py). SDL dummy encerra no processo.
