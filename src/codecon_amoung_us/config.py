@@ -18,6 +18,13 @@ NICKNAME_MAX_LENGTH: int = 12
 MAX_PLAYERS: int = 10
 MAX_FRAME_BYTES: int = 64 * 1024
 
+# Descoberta de partidas na LAN via UDP broadcast (ver net/discovery.py).
+DISCOVERY_PORT: int = 5557
+DISCOVERY_MAGIC: str = "codecon-amoung-us/1"
+DISCOVERY_BEACON_INTERVAL_SECONDS: float = 1.0
+DISCOVERY_LISTEN_SECONDS: float = 2.5
+MAX_DISCOVERY_BYTES: int = 512
+
 # Raios de interação (px) — fonte única para servidor e UI.
 KILL_RADIUS: float = 40.0
 REPORT_RADIUS: float = 50.0
@@ -104,6 +111,12 @@ class GameConfig:
     socket_timeout_seconds: float = 0.2
     # Tempo máximo de shutdown por thread (rede de segurança).
     shutdown_join_timeout_seconds: float = 3.0
+    # Anuncia a partida na LAN via UDP broadcast enquanto estiver em lobby
+    # (descoberta automática — ver net/discovery.py).
+    announce: bool = True
+    # Porta do listener WebSocket (transporte alternativo para atravessar
+    # firewalls corporativos); None desliga o listener (ver net/ws.py).
+    ws_port: int | None = None
 
     def resolve_map_path(self) -> Path:
         """Retorna o mapa configurado ou o padrão do projeto."""

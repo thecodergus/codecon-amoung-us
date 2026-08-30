@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..config import MAX_PLAYERS, PROTOCOL_VERSION, GameConfig
+from ..config import DISCOVERY_MAGIC, MAX_PLAYERS, PROTOCOL_VERSION, GameConfig
 from ..framing import FrameDecoder, FrameError, encode_frame
 from ..game._native_collision import FlatWalls, flatten_walls, resolve_movement_steps_flat
 from ..game.meeting import Meeting, MeetingOutcome, MeetingReason
@@ -58,6 +58,7 @@ from ..protocol import (
     VoteRequest,
     WorldSnapshot,
 )
+from .discovery import DiscoveryBeacon, GameAnnouncement
 from .dispatch import dispatch_ejection
 
 __all__ = ["GameServer", "main"]
@@ -190,6 +191,7 @@ class GameServer:
         self._listener: socket.socket | None = None
         self._listener_thread: threading.Thread | None = None
         self._game_thread: threading.Thread | None = None
+        self._beacon: DiscoveryBeacon | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -211,6 +213,25 @@ class GameServer:
         self._game_thread = threading.Thread(target=self._game_loop, name="game-loop", daemon=True)
         self._listener_thread.start()
         self._game_thread.start()
+        if self.config.announce:
+            self._beacon = DiscoveryBeacon(self._make_announcement)
+            self._beacon.start()
+
+    def _make_announcement(self) -> GameAnnouncement | None:
+        """Anúncio da partida para o beacon de descoberta (None fora do lobby)."""
+        with self._lock:
+            if self._state.phase is not Phase.LOBBY:
+                return None
+            host = self._state.player(self._host_id) if self._host_id is not None else None
+            return GameAnnouncement(
+                magic=DISCOVERY_MAGIC,
+                protocol_version=PROTOCOL_VERSION,
+                host_name=host.nickname if host is not None else "",
+                players=len(self._state.players),
+                max_players=self.config.max_players,
+                tcp_port=self.port,
+                ws_port=self.config.ws_port,
+            )
 
     def stop(self) -> None:
         """Encerra servidor e todas as threads (idempotente)."""
@@ -218,6 +239,9 @@ class GameServer:
             return
         self._stopped = True
         self._stop.set()
+        if self._beacon is not None:
+            self._beacon.stop()
+            self._beacon = None
         if self._listener is not None:
             with contextlib.suppress(OSError):
                 self._listener.close()

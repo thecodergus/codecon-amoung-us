@@ -29,6 +29,8 @@ _PACKAGE = _SRC / "codecon_amoung_us"
 _EXCLUDED_STEMS = {
     # msgspec.Struct introspeciona Annotated/Meta na criação das classes
     "protocol",
+    # GameAnnouncement também é msgspec.Struct (mesma razão de protocol)
+    "discovery",
     # entry points e pacotes permanecem puros
     "__init__",
     "__main__",
