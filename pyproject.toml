@@ -9,6 +9,7 @@ dependencies = [
     "msgspec>=0.21,<0.22",
     "pytiled-parser>=2.2.9,<3",
     "pygame-menu==4.5.2",
+    "cython>=3.3.0",
 ]
 
 [project.scripts]
