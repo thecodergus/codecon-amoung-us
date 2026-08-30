@@ -59,6 +59,7 @@ class Minigame(ABC):
     """
 
     task_type: str  # preenchido pela factory após a construção
+    logic: object  # estado puro do puzzle (classe *Logic de cada subclasse)
 
     def __init__(
         self,
