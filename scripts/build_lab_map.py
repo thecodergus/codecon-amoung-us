@@ -180,24 +180,21 @@ def largest_component(walk: set[tuple[int, int]]) -> set[tuple[int, int]]:
 
 
 def blocked_rects(walk: set[tuple[int, int]]) -> list[tuple[int, int, int, int]]:
-    """Agrupa células bloqueadas adjacentes ao caminhável em rects.
+    """Agrupa TODAS as células não-caminháveis em rects de parede.
 
-    Células bloqueadas fora da vizinhança do caminhável são ignoradas (vazio
-    externo). O agrupamento é por linhas (run-length merge vertical).
+    O mundo fica hermético: qualquer célula fora da união caminhável é
+    parede, inclusive o vazio externo — nenhuma região "livre" inalcançável
+    resta no mapa. O agrupamento é por linhas (run-length merge vertical),
+    o que colapsa o vazio em poucos rects grandes.
     """
-    neigh: set[tuple[int, int]] = set()
-    for x, y in walk:
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < _MAP_W and 0 <= ny < _MAP_H and (nx, ny) not in walk:
-                neigh.add((nx, ny))
+    blocked = {(x, y) for y in range(_MAP_H) for x in range(_MAP_W) if (x, y) not in walk}
     runs: list[tuple[int, int, int, int]] = []  # (x, y, w, h)
     for y in range(_MAP_H):
         x = 0
         while x < _MAP_W:
-            if (x, y) in neigh:
+            if (x, y) in blocked:
                 x0 = x
-                while x < _MAP_W and (x, y) in neigh:
+                while x < _MAP_W and (x, y) in blocked:
                     x += 1
                 runs.append((x0, y, x - x0, 1))
             else:
