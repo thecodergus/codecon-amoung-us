@@ -37,11 +37,12 @@ Data: 2026-08-30. Status: em execução.
   `sync.client.connect()` baseada em threads
   (websockets.readthedocs.io/en/stable/reference/sync) — encaixa na
   arquitetura atual sem asyncio.
-- PESQUISADO: mDNS/multicast falha com frequência em redes corporativas/de
-  evento (multicast dropado, client isolation em APs). UDP broadcast simples
-  + fallback manual é a escolha minimalista; **com client isolation nada
-  ponto-a-ponto funciona** (nem discovery, nem porta 80) — documentado como
-  limitação, não como bug.
+- DECISÃO DE ENGENHARIA (sem fonte formal citada — justificativa de design):
+  mDNS/multicast tende a falhar em redes corporativas/de evento (multicast
+  frequentemente dropado, client isolation em APs); UDP broadcast simples +
+  fallback manual é a escolha minimalista que cabe na stdlib. **Com client
+  isolation nada ponto-a-ponto funciona** (nem discovery, nem porta 80) —
+  documentado como limitação, não como bug.
 - Toolchain: `uv` + ruff + **mypy strict** + pytest (markers `integration`,
   timeout 15s).
 
