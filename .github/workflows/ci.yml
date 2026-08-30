@@ -62,6 +62,9 @@ jobs:
       - name: Builder --check (assets == saída do gerador)
         run: uv run python scripts/build_lab_map.py --check
 
+      - name: Builder de estações --check (sprites == saída do gerador)
+        run: uv run python scripts/build_task_props.py --check
+
   ui-xvfb:
     name: UI sob X real (Xvfb)
     runs-on: ubuntu-latest
