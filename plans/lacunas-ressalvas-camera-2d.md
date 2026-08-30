@@ -1,10 +1,20 @@
 # Plano — Lacunas dos VERIFICADO COM RESSALVAS (frescor de assets, QA visual, cantos)
 
-> Status: em execução (2026-08-30). Origem: auditoria técnica de 2026-08-30
+> Status: executado (2026-08-30). Origem: auditoria técnica de 2026-08-30
 > sobre o trabalho de mapa expandido + câmera 2D (`mapa-expandido-camera-2d.md`),
 > que concluiu 6 VERIFICADO e 2 VERIFICADO COM RESSALVAS (M-02 builder/assets,
 > M-06 wiring da câmera). Este plano cobre as lacunas dessas ressalvas e os
 > achados associados (F-01..F-03 + licença do tileset).
+>
+> Desvios materiais da execução:
+> 1. Comparação de pixels por **RGB** (não RGBA) no `--check` e nos testes
+>    golden-image: as superfícies 32 bits sem SRCALPHA carregam lixo no byte
+>    alfa; o PNG commitado é 24 bits. O alfa não carrega conteúdo.
+> 2. A-03 exigiu remover o `pygame.quit()` do `test_ui_smoke.py`: o flake
+>    documentado (cache de fontes do pygame-menu) viraria quebra da suíte
+>    com a ordem alfabética do novo `test_visual_regression.py`.
+> 3. A-06 também corrigiu a descrição desatualizada do `lab.json` no README
+>    (20x11/1280x704 -> 40x22/2560x1408), omissa do fechamento anterior.
 
 ## Diagnóstico consolidado
 
