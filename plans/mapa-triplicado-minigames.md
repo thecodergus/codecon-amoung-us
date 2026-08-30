@@ -1,10 +1,14 @@
 # Plano: mundo triplicado + 7 minigames obrigatórios
 
-Status: **executado** (build agent, 2026-08-30). Desvios: nenhum material —
-o mundo ficou em 70×38 (4480×2432, ~3× a área) com 1026 células caminháveis
-(~2,8× o baseline de 370; gate ≥1000). Fases A–F entregues em commits
-próprios (catálogo → mapa → framework+puzzles → integração → marcadores →
-docs/validação).
+Status: **executado** (build agent, 2026-08-30). Desvios: (a) o mundo ficou
+em 70×38 (4480×2432, ~3× a área) com 1026 células caminháveis (~2,8× o
+baseline de 370; gate ≥1000) — número re-derivado do builder em 2026-08-30
+(walkable=1026, componente único, 0 células fora); (b) a paleta Okabe-Ito
+prevista na Fase E não foi aplicada — manteve-se a família amarela existente
+e os signifiers de forma (losango/anel/glifo) como canal primário, conforme a
+prioridade da GAG (signifiers adicionais antes de trocar paleta). Fases A–F
+entregues em commits próprios (catálogo → mapa → framework+puzzles →
+integração → marcadores → docs/validação).
 
 ## Objetivo
 
@@ -41,10 +45,21 @@ ajustar `_MAP_W`/`_MAP_H` no builder — o restante do plano é invariante.
   regressão visual força `reduced_motion` e ticks fixos.
 - `assign_tasks` dá `min(2, len)` tarefas por tripulante (game/tasks.py) — mantido.
 - skeld.json é asset legado (só citado em comentários); DEFAULT_MAP=maps/lab.json.
-- Pesquisa aplicada: dificuldade mensurável por parâmetros explícitos
-  (Xiao & Yang 2025); feedback multimodal/progressão estruturada (Kamath et al.
-  2025); não depender só de cor (Game Accessibility Guidelines / Xbox AG);
-  signifiers/affordances (Norman).
+- Pesquisa aplicada (fontes verificadas em 2026-08-30): dificuldade
+  operacionalizada por parâmetros explícitos — Darzi, McCrea & Novak 2021
+  (JMIR Serious Games 9(2):e25771, DOI 10.2196/25771: ajuste dinâmico de 2
+  parâmetros explícitos; acurácia do ajuste correlaciona com enjoyment,
+  r=0,38; mais sensores não garantiram melhor UX). Contexto adicional:
+  Mortazavi, Moradi & Vahabie 2024 (revisão sistemática sobre DDA, DOI
+  10.1007/s11042-024-18768-x — metadados verificados; conteúdo não
+  inspecionado). Não depender só de cor: Game Accessibility Guidelines,
+  "Ensure no essential information is conveyed by a fixed colour alone"
+  (Vision, Basic — lida integralmente; cor como reforço, nunca canal único).
+  Feedback forma+animação+texto: decisão de engenharia ancorada na GAG; sem
+  fonte 2026 diretamente aplicável localizada (lacuna declarada). Xbox AG e
+  Norman (affordances): contexto canônico, não re-verificado nesta revisão.
+  As citações anteriores "Xiao & Yang 2025"/"Kamath et al. 2025" foram
+  removidas por não serem localizáveis em OpenAlex/arxiv/EuropePMC/Crossref.
 
 ## Fases
 
@@ -134,7 +149,8 @@ Cada um: lógica pura + draw + parâmetros de `TASK_DIFFICULTY` + teste headless
 ## Verificação
 
 1. `uv run ruff check --fix . && uv run ruff format .` — zero erros.
-2. `uv run basedpyright .` — strict verde.
+2. `uv run basedpyright .` — zero erros novos vs. baseline 643da38 (22 erros
+   preexistentes conhecidos, fora do escopo deste plano).
 3. `uv run pytest -v` — suíte completa (novos: catálogo, factory, 7 minigames;
    atualizados: mapa, loader, camera; integração existente inalterada).
 4. `python scripts/build_lab_map.py --check` — assets frescos e determinísticos.
