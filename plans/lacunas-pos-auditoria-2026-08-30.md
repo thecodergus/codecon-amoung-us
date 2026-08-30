@@ -1,6 +1,31 @@
 # Plano: Lacunas remanescentes pós-auditoria (descoberta LAN + WebSocket)
 
-Data: 2026-08-30. Status: em execução.
+Data: 2026-08-30. Status: executado (resultados na seção 6).
+
+## 6. Resultados da execução (2026-08-30)
+
+| Ação | Resultado | Commit |
+| ---- | --------- | ------ |
+| V-01 | Flake **reproduzido**: 1/6 na suíte, ~5% isolado (10/200). Causa-raiz: corrida TOCTOU probe-then-bind — `/proc/net/tcp` mostrou conexões de processos alheios (TIME_WAIT/LAST_ACK/FIN_WAIT1) na porta recém-sondada; EADDRINUSE nos dois binds do worker. **Não era** async-wait nem bug do produto | — |
+| V-03 | `uv audit`: 27 pacotes, **zero advisories** | — |
+| V-04 | Paridade 17.0 **refutada**: `legacy` não existe em `sync.client.connect` da 17.0 (TypeError; 5 falhas WS) → contingência aplicada: piso `websockets>=17.1,<18` | `474a900` |
+| A-04 | setup.py remove `.so` de stems excluídos em todo build; `viewmodel.so` residual removido pelo próprio build; import resolve `viewmodel.py`; suíte verde | `00aa90f` |
+| A-01 | Helper `_create_game_with_free_port` (retry só em EADDRINUSE, demais erros propagam). Verificação: **0/200** isolado (baseline 10/200) e **10/10** suítes completas consecutivas | `96e630c` |
+| A-02 | Comentário restaurado | `271ecf9` |
+| A-03 | README: amplitude do setcap + sysctl `ip_unprivileged_port_start` + descoberta não autenticada + servidor sem autenticação | `4ce15a5` |
+| A-05 | Afirmação mDNS reclassificada como decisão de engenharia sem fonte | `1120d78` |
+| A-06 | **Dispensada** — flake eliminado na causa-raiz; rerun seria máscara | — |
+| A-07 | `uv audit` promovido a gate bloqueante no CI | `3aabbd3` |
+| V-05 | **BLOQUEADO**: sem sudo/root no ambiente de execução. Protocolo pronto (seção 3) para VM descartável | — |
+| V-06 | **BLOQUEADO**: sem segundo host/AP/proxy disponíveis. Protocolos prontos (seção 3) | — |
+| L-01..L-03 | Aguardando decisão do usuário (reconexão, rotação, internet) | — |
+
+Achado adicional relevante fora do escopo original: V-04 revelou que a spec
+`websockets>=15` estava **incorreta** (código exige 17.1+) — corrigida antes
+de afetar qualquer ambiente com resolução mais antiga.
+
+Regressão global final: 10× suíte completa (870) verde, ruff limpo, mypy
+strict limpo (75 arquivos).
 
 > Origem: auditoria técnica independente dos commits `6173c5f..c76f131`
 > (descoberta LAN via UDP broadcast + transporte WebSocket). Veredito geral
