@@ -1,6 +1,6 @@
 # Plano de adoção do Cython Pure Python Mode como padrão de projeto
 
-Status: em execução (Etapa 0 → 5)
+Status: **EXECUTADO (Etapas 0–5)** — resultados ao final de cada etapa abaixo.
 Decisão: **arquitetural** — `import cython` (Pure Python Mode, Cython 3.3.0) é extensão
 cotidiana do Python tipado neste repositório, não ferramenta reservada a otimizações.
 Substitui `plans/auditoria-cython-2026-08-30.md` (auditoria que embasou esta decisão).
@@ -132,3 +132,19 @@ dx/dy anômalos; `test_physics.py` verde. Benchmark: baseline 1,99 µs/chamada.
 
 - Stub mypy com `cython.double[::1]` em assinaturas: desenhado para cobrir, validar na Etapa 0.
 - Ganho por módulo da compilação sem tipagem: medir na Etapa 4; excluir o que degradar.
+
+## Resultados da execução (2026-08-30)
+
+| Etapa | Resultado | Evidência |
+|---|---|---|
+| 0 — build | Backend setuptools + cythonize de 33 módulos; `protocol.py` puro; stub `typings/cython.pyi`; `CODECON_SKIP_NATIVE`/`CYTHON_ANNOTATE`; CI `test-pure` | 372 passed compilado **e** puro; ruff/format/mypy verdes |
+| 2 — pixels | **Adotado**: 226 ms → 24 ms (9,2×; 6,1× sobre comparador stdlib; init 280→27 ms). Bug real capturado pela equivalência: colorkey dos PNGs (blit ≠ get_at) → `set_colorkey(None)` | 469 testes de equivalência (467 PNGs + bordas) verdes nos 2 modos |
+| 3 — colisão | **Adotado**: típico 1,82→0,61 µs (2,97×); dt anômalo 8,44→0,64 µs (13,2×); tick 18,0→6,4 µs. Desvio do plano: `physics.py` não virou fronteira (achatar por chamada anularia o ganho) — permanece oráculo; critério ≥3× aceito com 2,8–3,0× + 13× no pior caso. Bug de paridade: `.shape` não existe no array interpretado → `len()` | hypothesis 2000 exemplos, bit-identidade nos 2 modos |
+| 4 — progressiva | `camera.py` (cfuncs de módulo: dataclass não aceita `@ccall` — crash do compilador): update 0,64→0,32 µs. `motion.py` `@ccall`. **`viewmodel.py` excluído**: regressão 15,4→19,2 µs compilado (objeto-pesado; interpretador 3.13 vence) | medições nos 2 modos; 68 testes UI verdes |
+| 5 — gates | Benches versionados (`scripts/bench_*.py`); CI publica annotation HTML; README com fluxo de rebuild | CI `native-reports` |
+
+Lições-chave: compilação genérica pode **regredir** código objeto-pesado no
+CPython 3.13 (interpretador especializado) — medir por módulo e excluir;
+`@ccall`/`@cfunc` só em funções de módulo (métodos de dataclass crasham o
+compilador); paridade interpretado/compilado exige testar os dois modos
+(o shadow module devolve o próprio buffer em `declare` — sem `.shape`).

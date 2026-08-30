@@ -64,6 +64,8 @@ else:
         _extension_modules(),
         language_level="3str",
         annotate=_ANNOTATE,
+        # com annotate, ignora o cache de .c para o relatório refletir o fonte atual
+        force=_ANNOTATE,
     )
 
 setup(ext_modules=ext_modules)

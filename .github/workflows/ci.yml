@@ -71,6 +71,40 @@ jobs:
       - name: smoke multiplayer E2E (modo puro)
         run: uv run python scripts/smoke_multiplayer.py
 
+  native-reports:
+    name: Annotation reports + benchmarks Cython
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv + Python 3.13
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      # CYTHON_ANNOTATE=1: gera os HTMLs de annotation ao lado dos fontes
+      # (gate de revisão de kernels: loops internos sem C-API residual).
+      - name: Build com annotation reports
+        run: uv sync --frozen
+        env:
+          CYTHON_ANNOTATE: "1"
+
+      - name: Publicar annotation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: cython-annotation-reports
+          path: src/**/*.html
+          if-no-files-found: error
+
+      # Informacional (sem threshold): runners de CI variam demais para
+      # gate de tempo; benchmarks comparativos rodam antes/depois de kernels.
+      - name: Benchmarks (informacional)
+        run: |
+          uv run python scripts/bench_sprites.py 5
+          uv run python scripts/bench_physics.py
+        env:
+          SDL_VIDEODRIVER: dummy
+
   assets-freshness:
     name: Frescor dos assets gerados
     runs-on: ubuntu-latest

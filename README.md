@@ -9,8 +9,31 @@ spawns e tarefas extraídos programaticamente.
 ## Stack
 
 - Python 3.13.x (projeto `uv`)
-- Runtime: `pygame` 2.6.1, `msgspec` ≥0.21, `pytiled-parser` ≥2.2.9, `pygame-menu` 4.5.2
-- Dev: `pytest` ≥9, `hypothesis` ≥6, `ruff` ≥0.16, `mypy` ≥2, `pytest-timeout`, `pytest-cov`
+- Runtime: `pygame` 2.6.1, `msgspec` ≥0.21, `pytiled-parser` ≥2.2.9, `pygame-menu` 4.5.2, `cython` ≥3.3
+- Dev: `pytest` ≥9, `hypothesis` ≥6, `ruff` ≥0.16, `mypy` ≥2, `pytest-timeout`, `pytest-cov`, `setuptools`
+
+## Cython (Pure Python Mode)
+
+O projeto adota `import cython` como extensão cotidiana do Python tipado
+(decisão e convenções em `plans/cython-pure-python-mode.md`). Os fontes
+continuam `.py` executáveis pelo interpretador; o build compila todos os
+módulos do pacote **exceto** `protocol.py` (msgspec introspeciona
+annotations), `viewmodel.py` (regressão medida — código objeto-pesado) e
+`__init__`/`__main__`.
+
+```bash
+uv sync                              # compila as extensões (editable, in-place em src/)
+CODECON_SKIP_NATIVE=1 uv sync --reinstall-package codecon-amoung-us   # modo puro
+CYTHON_ANNOTATE=1 uv sync --reinstall-package codecon-amoung-us       # relatórios HTML
+uv run python scripts/bench_sprites.py    # benchmark do kernel de pixels
+uv run python scripts/bench_physics.py    # benchmark do kernel de colisão
+```
+
+Após editar um `.py` de módulo compilado, é preciso rebuildar
+(`uv sync --reinstall-package codecon-amoung-us`). A suíde deve passar
+idêntica nos dois modos (o CI tem o job `test-pure` de paridade) e os
+kernels (`ui/_native_pixels.py`, `game/_native_collision.py`) têm
+equivalência provada por teste contra as implementações de referência.
 
 ## Execução
 
