@@ -50,6 +50,24 @@ registrar resultado ao final.
       8–10 jogadores.
 - [ ] Sem warnings de fonte/glyph no terminal.
 
+## Câmera 2D (mapa 2560x1408)
+
+Cobre o residual não automatizável do plano `lacunas-ressalvas-camera-2d.md`
+(A-02/A-03 já cobrem regressão visual e windowing real em CI).
+
+- [ ] Jogador no interior do mapa (hub) permanece centralizado no viewport
+      durante o movimento.
+- [ ] Nos 4 cantos do mapa a câmera para no limite: nenhuma área além do
+      mapa é exibida e o jogador fica visível junto à borda da tela.
+- [ ] Suavização sem jitter perceptível em movimento contínuo reto e em
+      diagonal; câmera acompanha sem degraus após mudança brusca de direção.
+- [ ] Início da partida sem travelling: primeiro frame já na posição do
+      jogador (sem varredura desde a origem).
+- [ ] HUD (papel, tarefas, vivos, prompt) permanece fixo na faixa inferior
+      com a câmera em movimento; nicknames e círculo do jogador local
+      alinhados aos sprites.
+- [ ] Menu principal sem distorção (crop do hub) e sem barras inesperadas.
+
 ## Registro
 
 | Data | Executor | Cenário | Resultado | Observações |
