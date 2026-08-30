@@ -26,7 +26,18 @@ _SRC = _ROOT / "src"
 _PACKAGE = _SRC / "codecon_amoung_us"
 
 # stems excluídos da compilação (qualquer diretório do pacote)
-_EXCLUDED_STEMS = {"protocol", "__init__", "__main__"}
+_EXCLUDED_STEMS = {
+    # msgspec.Struct introspeciona Annotated/Meta na criação das classes
+    "protocol",
+    # entry points e pacotes permanecem puros
+    "__init__",
+    "__main__",
+    # Regressão medida (2026-08-30, Etapa 4 do plano): derive_task_markers
+    # 15,4 µs interpretado vs 19,2 µs compilado — código objeto-pesado
+    # (dataclasses por item) onde o interpretador especializado do 3.13
+    # vence o código genérico do Cython. Reavaliar se o perfil mudar.
+    "viewmodel",
+}
 
 
 def _extension_modules() -> list[Extension]:

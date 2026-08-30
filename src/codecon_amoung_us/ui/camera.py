@@ -15,6 +15,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+import cython
+
 __all__ = ["FOLLOW_RATE", "DT_MAX", "Camera2D"]
 
 # Taxa de acompanhamento do amortecimento exponencial (1/s). Valores maiores
@@ -23,6 +25,25 @@ FOLLOW_RATE: float = 8.0
 # Teto de dt por frame (s): protege contra saltos após travamentos,
 # breakpoints ou Alt+Tab.
 DT_MAX: float = 0.1
+
+
+@cython.cfunc
+def _clamp_axis(
+    c: cython.double, lo: cython.double, hi: cython.double, view: cython.double
+) -> cython.double:
+    """Centro de um eixo em [lo+view/2, hi-view/2]; eixo curto fica centrado."""
+    if hi - lo > view:
+        return min(max(c, lo + view / 2), hi - view / 2)
+    return (lo + hi) / 2
+
+
+@cython.cfunc
+def _exp_step(
+    cur: cython.double, target: cython.double, rate: cython.double, dt: cython.double
+) -> cython.double:
+    """Um passo do amortecimento exponencial (alpha = 1 - exp(-rate*dt))."""
+    alpha: cython.double = 1.0 - math.exp(-rate * dt)
+    return cur + (target - cur) * alpha
 
 
 @dataclass
@@ -60,15 +81,7 @@ class Camera2D:
         """
         left, top, right, bottom = self.bounds
         vw, vh = self.viewport_size
-        if right - left > vw:
-            cx = min(max(cx, left + vw / 2), right - vw / 2)
-        else:
-            cx = (left + right) / 2
-        if bottom - top > vh:
-            cy = min(max(cy, top + vh / 2), bottom - vh / 2)
-        else:
-            cy = (top + bottom) / 2
-        return cx, cy
+        return _clamp_axis(cx, left, right, vw), _clamp_axis(cy, top, bottom, vh)
 
     # ----------------------------------------------------------- movimento
 
@@ -88,9 +101,8 @@ class Camera2D:
         """
         dt = min(max(dt, 0.0), DT_MAX)
         tx, ty = self._clamp_center(*target)
-        alpha = 1.0 - math.exp(-self.follow_rate * dt)
-        self._cx += (tx - self._cx) * alpha
-        self._cy += (ty - self._cy) * alpha
+        self._cx = _exp_step(self._cx, tx, self.follow_rate, dt)
+        self._cy = _exp_step(self._cy, ty, self.follow_rate, dt)
 
     # ------------------------------------------------------- transformação
 

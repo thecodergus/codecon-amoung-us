@@ -7,6 +7,8 @@ antes de aplicar deslocamento/pulse (ver ``theme.py``).
 
 from __future__ import annotations
 
+import cython
+
 __all__ = ["FAST", "NORMAL", "EMPHASIS", "ease_out_cubic", "lerp", "normalized_progress"]
 
 # Durações baseline de design (ms), a validar visualmente.
@@ -15,18 +17,23 @@ NORMAL: float = 170.0
 EMPHASIS: float = 260.0
 
 
-def ease_out_cubic(t: float) -> float:
+@cython.ccall
+def ease_out_cubic(t: cython.double) -> cython.double:
     """Easing cúbico de saída (desacelera ao final), t em [0, 1]."""
     t = max(0.0, min(1.0, t))
     return 1.0 - (1.0 - t) ** 3
 
 
-def lerp(a: float, b: float, t: float) -> float:
+@cython.ccall
+def lerp(a: cython.double, b: cython.double, t: cython.double) -> cython.double:
     """Interpolação linear entre ``a`` e ``b`` (t em [0, 1])."""
     return a + (b - a) * t
 
 
-def normalized_progress(start: float, duration: float, now: float) -> float:
+@cython.ccall
+def normalized_progress(
+    start: cython.double, duration: cython.double, now: cython.double
+) -> cython.double:
     """Progresso normalizado (0..1) de um intervalo de tempo."""
     if duration <= 0:
         return 1.0
