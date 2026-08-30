@@ -60,12 +60,13 @@ from ..protocol import (
 )
 from .discovery import DiscoveryBeacon, GameAnnouncement
 from .dispatch import dispatch_ejection
+from .ws import WSClientConnection, WSListener
 
 __all__ = ["GameServer", "main"]
 
 # fila de comandos -> (conexão, mensagem); None em broadcast de saída
-_Command = tuple["ClientConnection", Message]
-_OutboxItem = tuple["ClientConnection | None", Message]
+_Command = tuple["Connection", Message]
+_OutboxItem = tuple["Connection | None", Message]
 
 # Teto da fila de comandos: backpressure estrutural (A-07). O ``put`` do
 # recv thread bloqueia quando cheia e o TCP regula o produtor; o game loop
@@ -140,6 +141,11 @@ class ClientConnection:
             self.thread.join(timeout)
 
 
+# Uma conexão de cliente, por qualquer transporte (TCP cru ou WebSocket).
+# O game loop e o despacho só dependem desta interface pública comum.
+Connection = ClientConnection | WSClientConnection
+
+
 class GameServer:
     """Servidor autoritativo de partidas estilo Among Us."""
 
@@ -181,8 +187,8 @@ class GameServer:
         self._stopped = False
         self._commands: queue.Queue[_Command] = queue.Queue(maxsize=COMMAND_QUEUE_MAXSIZE)
         self._inputs: dict[int, tuple[float, float]] = {}
-        self._conns: list[ClientConnection] = []
-        self._connections: dict[int, ClientConnection] = {}
+        self._conns: list[Connection] = []
+        self._connections: dict[int, Connection] = {}
         self._host_id: int | None = None
         self._next_player_id = 0
         self._next_meeting_id = 1
@@ -192,6 +198,7 @@ class GameServer:
         self._listener_thread: threading.Thread | None = None
         self._game_thread: threading.Thread | None = None
         self._beacon: DiscoveryBeacon | None = None
+        self._ws_listener: WSListener | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -213,6 +220,8 @@ class GameServer:
         self._game_thread = threading.Thread(target=self._game_loop, name="game-loop", daemon=True)
         self._listener_thread.start()
         self._game_thread.start()
+        if self.config.ws_port is not None:
+            self._ws_listener = WSListener(self, self.host, self.config.ws_port)
         if self.config.announce:
             self._beacon = DiscoveryBeacon(self._make_announcement)
             self._beacon.start()
@@ -249,6 +258,11 @@ class GameServer:
             conns = list(self._conns)
         for conn in conns:
             conn.close()
+        # Depois das conexões fechadas: handlers WS bloqueados em recv só
+        # retornam quando a conexão fecha (shutdown aguarda os handlers).
+        if self._ws_listener is not None:
+            self._ws_listener.stop(self.config.shutdown_join_timeout_seconds)
+            self._ws_listener = None
         for thread in (self._listener_thread, self._game_thread):
             if thread is not None:
                 thread.join(self.config.shutdown_join_timeout_seconds)
@@ -274,8 +288,7 @@ class GameServer:
             except OSError:
                 break
             conn = ClientConnection(self, sock)
-            with self._lock:
-                self._conns.append(conn)
+            self.register_connection(conn)
             conn.start()
 
     def _game_loop(self) -> None:
@@ -314,10 +327,15 @@ class GameServer:
 
     # ------------------------------------------------------------------ entrada
 
-    def enqueue(self, conn: ClientConnection, message: Message) -> None:
+    def register_connection(self, conn: Connection) -> None:
+        """Registra uma conexão aceita por um listener (TCP ou WebSocket)."""
+        with self._lock:
+            self._conns.append(conn)
+
+    def enqueue(self, conn: Connection, message: Message) -> None:
         self._commands.put((conn, message))
 
-    def on_disconnect(self, conn: ClientConnection) -> None:
+    def on_disconnect(self, conn: Connection) -> None:
         """Remove a conexão e trata a saída do jogador."""
         with self._lock:
             if conn in self._conns:
@@ -355,9 +373,7 @@ class GameServer:
                 return
             self._dispatch(conn, message, outbox)
 
-    def _dispatch(
-        self, conn: ClientConnection, message: Message, outbox: list[_OutboxItem]
-    ) -> None:
+    def _dispatch(self, conn: Connection, message: Message, outbox: list[_OutboxItem]) -> None:
         # match por tipo: cada branch é tipada estaticamente (sem dict de
         # handlers nem supressão de tipo) e o custo linear é irrisório no
         # volume de comandos por tick.
@@ -379,7 +395,7 @@ class GameServer:
             case TaskActionRequest():
                 self._on_task(conn, message, outbox)
 
-    def _reject_connection(self, conn: ClientConnection, message: Message) -> None:
+    def _reject_connection(self, conn: Connection, message: Message) -> None:
         """Envia a rejeição diretamente e fecha a conexão.
 
         Usado nos erros de protocolo do join: a resposta precisa chegar antes
@@ -389,7 +405,7 @@ class GameServer:
         conn.send(message)
         conn.close()
 
-    def _on_join(self, conn: ClientConnection, msg: JoinRequest, outbox: list[_OutboxItem]) -> None:
+    def _on_join(self, conn: Connection, msg: JoinRequest, outbox: list[_OutboxItem]) -> None:
         if conn.player_id is not None:
             # Cliente conforme nunca envia JoinRequest duas vezes: apenas
             # informa o erro sem fechar, para não expulsar o jogador legítimo
@@ -439,7 +455,7 @@ class GameServer:
             )
 
     def _on_start_request(
-        self, conn: ClientConnection, _msg: StartGameRequest, outbox: list[_OutboxItem]
+        self, conn: Connection, _msg: StartGameRequest, outbox: list[_OutboxItem]
     ) -> None:
         if self._state.phase is not Phase.LOBBY:
             outbox.append(
@@ -522,7 +538,7 @@ class GameServer:
             outbox.append((conn, TaskState(tasks=tasks)))
 
     def _on_movement(
-        self, conn: ClientConnection, msg: MovementInput, _outbox: list[_OutboxItem]
+        self, conn: Connection, msg: MovementInput, _outbox: list[_OutboxItem]
     ) -> None:
         if self._state.phase is not Phase.PLAYING:
             return
@@ -558,7 +574,7 @@ class GameServer:
             return DenialCode.COOLDOWN, "kill em recarga", max(0.0, remaining)
         return None
 
-    def _on_kill(self, conn: ClientConnection, msg: KillRequest, outbox: list[_OutboxItem]) -> None:
+    def _on_kill(self, conn: Connection, msg: KillRequest, outbox: list[_OutboxItem]) -> None:
         if self._state.phase is not Phase.PLAYING or conn.player_id is None:
             outbox.append(
                 (
@@ -600,9 +616,7 @@ class GameServer:
         )
         self._check_win(outbox)
 
-    def _on_report(
-        self, conn: ClientConnection, msg: BodyReported, outbox: list[_OutboxItem]
-    ) -> None:
+    def _on_report(self, conn: Connection, msg: BodyReported, outbox: list[_OutboxItem]) -> None:
         if self._state.phase is not Phase.PLAYING or conn.player_id is None:
             outbox.append(
                 (
@@ -657,7 +671,7 @@ class GameServer:
         self._start_meeting(MeetingReason.KILL_REPORTED, outbox)
 
     def _on_emergency(
-        self, conn: ClientConnection, _msg: EmergencyMeetingRequest, outbox: list[_OutboxItem]
+        self, conn: Connection, _msg: EmergencyMeetingRequest, outbox: list[_OutboxItem]
     ) -> None:
         if self._state.phase is not Phase.PLAYING or conn.player_id is None:
             outbox.append(
@@ -707,7 +721,7 @@ class GameServer:
             return
         self._start_meeting(MeetingReason.EMERGENCY, outbox)
 
-    def _on_vote(self, conn: ClientConnection, msg: VoteRequest, outbox: list[_OutboxItem]) -> None:
+    def _on_vote(self, conn: Connection, msg: VoteRequest, outbox: list[_OutboxItem]) -> None:
         if self._state.phase is not Phase.MEETING or conn.player_id is None:
             outbox.append(
                 (
@@ -774,9 +788,7 @@ class GameServer:
         if meeting.all_voted:
             self._finish_meeting(outbox)
 
-    def _on_task(
-        self, conn: ClientConnection, msg: TaskActionRequest, outbox: list[_OutboxItem]
-    ) -> None:
+    def _on_task(self, conn: Connection, msg: TaskActionRequest, outbox: list[_OutboxItem]) -> None:
         if self._state.phase is not Phase.PLAYING or conn.player_id is None:
             outbox.append(
                 (
@@ -995,11 +1007,18 @@ def _server_config(args: argparse.Namespace) -> GameConfig:
     """
     if not 1 <= args.port <= 65535:
         raise ValueError(f"porta fora do intervalo [1, 65535]: {args.port}")
+    if args.ws_port is not None:
+        if not 1 <= args.ws_port <= 65535:
+            raise ValueError(f"ws-port fora do intervalo [1, 65535]: {args.ws_port}")
+        if args.ws_port == args.port:
+            raise ValueError("ws-port deve ser diferente da porta TCP")
     if args.tick_rate is not None and args.tick_rate < 1:
         raise ValueError(f"tick-rate deve ser >= 1: {args.tick_rate}")
     if args.max_players is not None and not 1 <= args.max_players <= MAX_PLAYERS:
         raise ValueError(f"max-players deve estar em [1, {MAX_PLAYERS}]: {args.max_players}")
     config = GameConfig()
+    if args.ws_port is not None:
+        config = dataclasses.replace(config, ws_port=args.ws_port)
     if args.max_players is not None:
         config = dataclasses.replace(config, max_players=args.max_players)
     if args.tick_rate is not None:
@@ -1010,7 +1029,13 @@ def _server_config(args: argparse.Namespace) -> GameConfig:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="codecon-amoung-us-server")
     parser.add_argument("--host", default="127.0.0.1", help="endereço de escuta")
-    parser.add_argument("--port", type=int, default=5555, help="porta de escuta")
+    parser.add_argument("--port", type=int, default=5555, help="porta de escuta TCP")
+    parser.add_argument(
+        "--ws-port",
+        type=int,
+        default=None,
+        help="porta WebSocket (transporte preferencial; ex.: 80 atravessa firewalls)",
+    )
     parser.add_argument("--map", default=None, help="caminho do mapa Tiled (default: lab)")
     parser.add_argument("--max-players", type=int, default=None, help="limite de jogadores")
     parser.add_argument("--tick-rate", type=int, default=None, help="ticks por segundo")
@@ -1024,6 +1049,8 @@ def main(argv: list[str] | None = None) -> None:
     server.start()
     try:
         print(f"servidor ouvindo em {args.host}:{server.port} (mapa: {server._game_map.name})")
+        if server._ws_listener is not None:
+            print(f"websocket ouvindo em {args.host}:{server._ws_listener.port}")
         while True:
             time.sleep(1)
     except KeyboardInterrupt:

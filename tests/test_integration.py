@@ -897,14 +897,14 @@ def test_bad_version_rejected_direct(server: GameServer) -> None:
     import socket as _socket
 
     from codecon_amoung_us.framing import FrameDecoder
-    from codecon_amoung_us.net.server import ClientConnection
+    from codecon_amoung_us.net.server import ClientConnection, Connection
     from codecon_amoung_us.protocol import Message
 
     # Família padrão (AF_UNIX onde disponível, senão AF_INET): portátil
     # Linux/macOS/Windows (docs.python.org/3/library/socket.html#socket.socketpair).
     sock_a, sock_b = _socket.socketpair()
     conn = ClientConnection(server, sock_a)
-    outbox: list[tuple[ClientConnection | None, Message]] = []
+    outbox: list[tuple[Connection | None, Message]] = []
     server._on_join(conn, JoinRequest(nickname="x", protocol_version=0), outbox)
     sock_b.settimeout(2.0)
     data = sock_b.recv(4096)

@@ -2,6 +2,11 @@
 
 Data: 2026-08-30. Status: em execução.
 
+> Diretriz adicional (2026-08-30, durante o build): **WebSocket é o
+> transporte padrão ouro; TCP cru é o fallback**. O cliente tenta WS primeiro
+> (`connect_auto`), o anúncio de descoberta carrega ambas as portas e a UI
+> assume WS como padrão.
+
 ## Objetivo
 
 1. **Eliminar a necessidade de IP manual em LAN**: o jogo anuncia-se via UDP
