@@ -13,7 +13,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, cast
 
@@ -257,6 +257,7 @@ class App:
         self.menu_main = self._build_main_menu()
         self.menu_host = self._build_host_menu()
         self.menu_join = self._build_join_menu()
+        self.menu_settings = self._build_settings_menu()
         self.lobby_menu = self._build_lobby_menu()
         self._current_menu: pygame_menu.Menu | None = None
         # controles persistentes por tela: hover/pressed e foco sobrevivem
@@ -294,6 +295,7 @@ class App:
         menu.add.label("LAB • AMONG DUCKS", font_size=18, font_color=COLOR_TEXT_DIM)
         menu.add.button("Criar partida", self._open_host)
         menu.add.button("Entrar em partida", self._open_join)
+        menu.add.button("Configurações", self._open_settings)
         menu.add.button("Sair", pygame_menu.events.EXIT)
         return menu
 
@@ -313,6 +315,22 @@ class App:
         menu.add.button("Entrar", self._join_game)
         menu.add.button("Voltar", self._back_to_main)
         return menu
+
+    def _build_settings_menu(self) -> pygame_menu.Menu:
+        menu = pygame_menu.Menu("Configurações", WINDOW_W, WINDOW_H, theme=self._theme)
+        menu.add.selector(
+            "Reduzir movimento: ",
+            [("NÃO", False), ("SIM", True)],
+            default=1 if self.ui_settings.reduced_motion else 0,
+            onchange=self._on_reduced_motion_change,
+        )
+        menu.add.button("Voltar", self._back_to_main)
+        return menu
+
+    def _on_reduced_motion_change(self, _value: tuple[str, bool], enabled: bool) -> None:
+        """Aplica a preferência imediatamente (sem reiniciar a aplicação)."""
+        self.ui_settings = replace(self.ui_settings, reduced_motion=enabled)
+        self.renderer.reduced_motion = enabled
 
     def _build_lobby_menu(self) -> pygame_menu.Menu:
         menu = pygame_menu.Menu("Lobby", WINDOW_W, WINDOW_H, theme=self._theme)
@@ -334,6 +352,10 @@ class App:
     def _open_join(self) -> None:
         self.screen_name = "join"
         self._current_menu = self.menu_join
+
+    def _open_settings(self) -> None:
+        self.screen_name = "settings"
+        self._current_menu = self.menu_settings
 
     def _back_to_main(self) -> None:
         self.screen_name = "main"
@@ -693,7 +715,7 @@ class App:
                 self.screen_name = "game"
 
     def _render(self, events: list[pygame.event.Event]) -> None:
-        if self.screen_name in ("main", "host", "join"):
+        if self.screen_name in ("main", "host", "join", "settings"):
             menu = self._current_menu
             if menu is not None:
                 menu.update(events)

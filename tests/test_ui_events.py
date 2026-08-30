@@ -746,3 +746,39 @@ def test_custom_screens_have_keyboard_navigation(app: App, monkeypatch: pytest.M
     app._show_error("outra falha")
     app._render_error([escape])
     assert app.screen_name == "main"
+
+
+# ---------------------------------------------------------------------------
+# Configurações (reduced motion)
+# ---------------------------------------------------------------------------
+
+
+def test_reduced_motion_toggle_updates_renderer(app: App) -> None:
+    """O toggle de Configurações aplica no renderer imediatamente (runtime)."""
+    app._on_reduced_motion_change(("SIM", True), True)
+    assert app.ui_settings.reduced_motion is True
+    assert app.renderer.reduced_motion is True
+    app._on_reduced_motion_change(("NÃO", False), False)
+    assert app.ui_settings.reduced_motion is False
+    assert app.renderer.reduced_motion is False
+
+
+def test_reduced_motion_env_var_is_initial_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A env var define o valor inicial (a tela passa a ser o controle)."""
+    monkeypatch.setenv("CODECON_AMONG_US_REDUCED_MOTION", "1")
+    env_app = App()
+    try:
+        assert env_app.ui_settings.reduced_motion is True
+        assert env_app.renderer.reduced_motion is True
+    finally:
+        env_app._shutdown_connection()
+
+
+def test_settings_screen_opens_from_main_menu(app: App) -> None:
+    app._open_settings()
+    assert app.screen_name == "settings"
+    assert app._current_menu is app.menu_settings
+    app._render([])  # branch de menu renderiza sem exceção
+    app._back_to_main()
+    assert app.screen_name == "main"
+    assert app._current_menu is app.menu_main

@@ -58,8 +58,10 @@ do impostor ("Kill: Ns" + contador no prompt).
 
 - A janela é redimensionável (RESIZABLE): o jogo renderiza em resolução
   lógica 1280×768 e aplica letterbox preservando o aspect (sem esticar).
-- Redução de movimento: `CODECON_AMONG_US_REDUCED_MOTION=1` desativa
-  pulsação contínua dos marcadores e animações ornamentais.
+- Redução de movimento: menu **Configurações** → "Reduzir movimento" (aplica
+  imediatamente, sem reiniciar). O valor inicial pode ser definido por
+  `CODECON_AMONG_US_REDUCED_MOTION=1`. Desativa a pulsação contínua dos
+  marcadores e animações ornamentais.
 - Captura determinística de estados da UI para QA visual:
   `uv run python scripts/capture_ui_states.py` (grava PNGs em `captures/`).
 
