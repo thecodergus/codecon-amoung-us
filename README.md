@@ -98,14 +98,17 @@ src/codecon_amoung_us/
                      + dispatch.py (sigilo)
   ui/                app.py (App, menus, jogo, votação) + render.py +
                      sprites.py (duckee)
-assets/maps/lab.json      mapa Tiled (20x11, 64px, 1280x704): paredes, spawns,
-                          tarefas, botão de emergência — extraído da cena do
-                          pack "Top Down Lab" (models/mapa)
+assets/maps/lab.json      mapa Tiled (40x22, 64px, 2560x1408): paredes, spawns,
+                          tarefas, botão de emergência, salas — gerado pelo
+                          build_lab_map.py
 assets/maps/lab_scene.png cena do lab em resolução de mundo (fundo do jogo)
 assets/maps/skeld.json    mapa Tiled legado (40x30, 32px) — suportado pelo
                           loader, não é mais o padrão
 models/duckee/            sprites dos personagens (8 cores, idle/walk/death)
-models/mapa/              pack do mapa (cena + tileset + overlay de QA)
+models/mapa/              pack do mapa "Top Down Lab", de Luis Zuno
+                          (@ansimuz — ansimuz.itch.io; licença permissiva em
+                          "Top Down Lab files/public-license.txt"): tileset
+                          da cena + overlay de QA
 scripts/build_lab_map.py  gera assets/maps/lab.json + cena 2560x1408 a
                           partir do layout declarado de salas/corredores
 scripts/smoke_multiplayer.py   smoke headless da Etapa 14
