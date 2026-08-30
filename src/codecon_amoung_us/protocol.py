@@ -209,6 +209,13 @@ class RoleAssigned(MessageBase):
 
 
 class WorldSnapshot(MessageBase):
+    """Estado do mundo em um tick — mensagem idêntica para todos (broadcast).
+
+    ``alive`` é público por decisão de design: mortes por kill e por ejeção
+    aparecem aqui da mesma forma, sem marcador de causa (ver o contrato de
+    sigilo da votação em ``MeetingEnded``).
+    """
+
     tick: Tick
     players: Annotated[list[SnapshotPlayer], msgspec.Meta(max_length=MAX_PLAYERS)]
     bodies: Annotated[list[SnapshotBody], msgspec.Meta(max_length=MAX_PLAYERS)]
@@ -226,20 +233,39 @@ class MeetingStarted(MessageBase):
 
 
 class MeetingEnded(MessageBase):
-    """Fim da reunião — não revela quem foi ejetado nem a contagem de votos.
+    """Fim da reunião — encerramento idêntico para todos os desfechos.
 
-    O booleano de ejeção foi removido no protocolo v2: somente o ejetado
-    recebe ``Ejected`` (privado) com identidade e papel. O escopo do sigilo
-    é a identidade/papel no fim da reunião — o estado vivo/morto do ejetado
-    torna-se público no ``WorldSnapshot`` seguinte (``alive=False``), como
-    no Among Us original: é decisão de design, não vazamento.
+    Contrato de sigilo da votação (protocolo v2). Três estados após a reunião:
+
+    1. **Estado autoritativo (servidor):** conhece o resultado real — o
+       ejetado está eliminado (``alive=False``): não executa tarefas, não
+       vota, não mata, não reporta e não conta como jogador ativo na
+       condição de vitória.
+    2. **Visão do ejetado:** recebe ``Ejected`` (privado, identidade + papel)
+       antes desta mensagem e entra no modo espectador.
+    3. **Visão dos demais:** recebe SOMENTE esta mensagem — estruturalmente
+       idêntica para ejeção, empate e skip (somente ``meeting_id``). Nenhum
+       campo revela quem foi ejetado, o papel ou a contagem de votos.
+
+    O estado vivo/morto do ejetado torna-se público no ``WorldSnapshot``
+    seguinte (``alive=False``), indistinguível de uma morte por kill — como
+    no Among Us original. É cláusula explícita do contrato (decisão de
+    design), não vazamento: o sigilo proíbe entregar o resultado pela
+    mensagem; inferência decorrente do comportamento futuro da partida está
+    fora de escopo. Garantido por ``dispatch_ejection`` e testado sobre os
+    bytes serializados em ``tests/test_secrecy_properties.py``.
     """
 
     meeting_id: MessageId
 
 
 class Ejected(MessageBase):
-    """Identificação explícita do ejetado — SOMENTE enviada ao próprio ejetado."""
+    """Identificação explícita do ejetado — SOMENTE enviada ao próprio ejetado.
+
+    É a única mensagem do protocolo que revela o resultado da votação, e vai
+    apenas para o jogador ejetado (visão privada — ver o contrato em
+    ``MeetingEnded``). Clientes não ejetados nunca a recebem.
+    """
 
     player_id: PlayerId
     role: Role

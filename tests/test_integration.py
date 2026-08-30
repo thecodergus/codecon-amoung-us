@@ -536,9 +536,11 @@ def test_voting_majority_ejection_is_secret_over_the_wire(
 def test_ejected_player_is_dead_in_next_snapshot_by_design(
     server: GameServer,
 ) -> None:
-    """Contrato do escopo de sigilo (A-05): o fim da reunião não revela QUEM
-    foi ejetado, mas o estado vivo/morto do ejetado é público no snapshot
-    seguinte (alive=False) — decisão de design, como no Among Us original.
+    """Teste C do contrato de sigilo (A-05; ver "Sigilo da votação" no
+    README): o fim da reunião não revela QUEM foi ejetado, mas o estado
+    vivo/morto do ejetado é público no snapshot seguinte (alive=False) —
+    cláusula explícita do contrato, decisão de design, como no Among Us
+    original.
 
     Usa 6 jogadores para a partida continuar após a ejeção (com 4, qualquer
     ejeção encerra o jogo e os snapshots param).
@@ -562,6 +564,134 @@ def test_ejected_player_is_dead_in_next_snapshot_by_design(
     assert not ejected.alive
     for client in clients:
         client.close()
+
+
+@pytest.mark.timeout(60)
+def test_denials_for_dead_players_do_not_reveal_ejection() -> None:
+    """Teste D do contrato de sigilo: recusas contra jogadores mortos não
+    distinguem morte por kill de morte por ejeção.
+
+    Para cada caminho (kill, emergency, tarefa, report, voto), a recusa
+    contra um jogador morto por kill e contra o ejetado tem o MESMO
+    DenialCode (NOT_ALIVE) e a MESMA razão textual, sem menção a ejeção —
+    o estado público é "morto" e nada mais.
+
+    Usa 6 jogadores e cooldown curto para a partida continuar após uma
+    ejeção e um segundo kill.
+    """
+    import re as _re
+    import time as _time
+
+    srv = GameServer(
+        host="127.0.0.1",
+        port=_free_port(),
+        config=GameConfig(kill_cooldown_seconds=0.5),
+    )
+    srv.start()
+    clients = [GameClient() for _ in range(6)]
+    try:
+        for i, client in enumerate(clients):
+            client.connect("127.0.0.1", srv.port, f"player{i}", timeout=5.0)
+        _start_game(clients)
+        impostor, killed_id, meeting_id = _impostor_kills_and_reports(srv, clients)
+        voters = _all_alive_voters(impostor)
+        ejected_id = next(pid for pid in voters if pid != impostor.player_id)
+        for client in clients:
+            if client.player_id in voters:
+                client.vote(meeting_id, ejected_id)
+        for client in clients:
+            client.wait_for(MeetingEnded, timeout=5.0)
+        by_id = {c.player_id: c for c in clients}
+        kill_dead = by_id[killed_id]
+        ejected_dead = by_id[ejected_id]
+        living_crew = [
+            c for c in clients if c.player_id not in (impostor.player_id, killed_id, ejected_id)
+        ]
+
+        denials: dict[tuple[str, str], ActionDenied] = {}
+
+        # kill: NOT_ALIVE é verificado antes do alcance (posição irrelevante)
+        impostor.kill(killed_id)
+        denials[("kill", "kill")] = impostor.wait_for(ActionDenied, timeout=5.0)
+        impostor.kill(ejected_id)
+        denials[("kill", "ejected")] = impostor.wait_for(ActionDenied, timeout=5.0)
+
+        # emergency: jogador morto é verificado antes da proximidade do botão
+        kill_dead.emergency()
+        denials[("emergency", "kill")] = kill_dead.wait_for(ActionDenied, timeout=5.0)
+        ejected_dead.emergency()
+        denials[("emergency", "ejected")] = ejected_dead.wait_for(ActionDenied, timeout=5.0)
+
+        # tarefa existente qualquer: morto é verificado antes de atribuição/raio
+        task_id = None
+        start = _time.monotonic()
+        while task_id is None and _time.monotonic() - start < 5.0:
+            for candidate in living_crew:
+                if candidate.tasks is not None and candidate.tasks.tasks:
+                    task_id = candidate.tasks.tasks[0].task_id
+                    break
+            _time.sleep(0.01)
+        assert task_id is not None, "nenhuma tarefa atribuída aos tripulantes vivos"
+        kill_dead.complete_task(task_id)
+        denials[("task", "kill")] = kill_dead.wait_for(ActionDenied, timeout=5.0)
+        ejected_dead.complete_task(task_id)
+        denials[("task", "ejected")] = ejected_dead.wait_for(ActionDenied, timeout=5.0)
+
+        # report: morto é verificado antes do alcance do corpo (segundo kill
+        # gera um corpo não reportado; voter é poupado para a fase de voto)
+        _time.sleep(0.6)  # cooldown do primeiro kill (config: 0.5s)
+        voter = living_crew[0]
+        snap = impostor.wait_for_snapshot(timeout=5.0)
+        second_target = next(
+            p.player_id
+            for p in snap.players
+            if p.alive and p.player_id not in (impostor.player_id, voter.player_id)
+        )
+        assert _move_next_to(impostor, second_target, srv.config.kill_radius)
+        impostor.kill(second_target)
+        body_id = None
+        start = _time.monotonic()
+        while _time.monotonic() - start < 5.0:
+            latest = impostor.snapshot
+            if latest and latest.bodies:
+                body_id = latest.bodies[0].body_id
+                break
+            _time.sleep(0.02)
+        assert body_id is not None, "corpo não apareceu"
+        kill_dead.report(body_id)
+        denials[("report", "kill")] = kill_dead.wait_for(ActionDenied, timeout=5.0)
+        ejected_dead.report(body_id)
+        denials[("report", "ejected")] = ejected_dead.wait_for(ActionDenied, timeout=5.0)
+
+        # voto (segunda reunião): alvo morto → NOT_ALIVE uniforme; votos
+        # recusados não contam, então o mesmo votante tenta os dois alvos
+        impostor.report(body_id)
+        meeting2 = impostor.wait_for(MeetingStarted, timeout=5.0)
+        voter.vote(meeting2.meeting_id, killed_id)
+        denials[("vote", "kill")] = voter.wait_for(ActionDenied, timeout=5.0)
+        voter.vote(meeting2.meeting_id, ejected_id)
+        denials[("vote", "ejected")] = voter.wait_for(ActionDenied, timeout=5.0)
+        # encerra a reunião sem ejeção (skip de todos os vivos)
+        snap = impostor.wait_for_snapshot(timeout=5.0)
+        alive_ids = {p.player_id for p in snap.players if p.alive}
+        for client in clients:
+            if client.player_id in alive_ids:
+                client.vote(meeting2.meeting_id, None)
+        for client in clients:
+            client.wait_for(MeetingEnded, timeout=5.0)
+
+        for path in ("kill", "emergency", "task", "report", "vote"):
+            by_kill = denials[(path, "kill")]
+            by_ejection = denials[(path, "ejected")]
+            assert by_kill.code is DenialCode.NOT_ALIVE, path
+            assert by_ejection.code is DenialCode.NOT_ALIVE, path
+            assert by_kill.reason == by_ejection.reason, path
+            assert not _re.search("ejet", by_kill.reason, _re.IGNORECASE), path
+            assert not _re.search("ejet", by_ejection.reason, _re.IGNORECASE), path
+    finally:
+        for client in clients:
+            client.close()
+        srv.stop()
 
 
 @pytest.mark.timeout(40)

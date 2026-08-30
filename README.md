@@ -124,7 +124,35 @@ Decisões de protocolo principais:
 - **Ejeção confidencial (protocolo v2):** `Ejected` (identidade + papel) vai
   somente ao ejetado; todos recebem `MeetingEnded` `{meeting_id}` — sem
   booleano de ejeção, sem votos, sem contagem; papéis só são revelados no
-  `GameOver`.
+  `GameOver`. Ver "Sigilo da votação" abaixo para o contrato completo.
+
+## Sigilo da votação
+
+Contrato formal (protocolo v2) — o que cada parte sabe após uma votação:
+
+1. **Estado autoritativo (servidor):** conhece o resultado real. O ejetado
+   está eliminado (`alive=False`): não executa tarefas, não vota, não mata,
+   não reporta e não conta como jogador ativo na condição de vitória.
+2. **Visão do ejetado:** recebe `Ejected{player_id, role}` (privado) antes do
+   `MeetingEnded` e entra no modo espectador.
+3. **Visão dos demais:** recebe **somente** `MeetingEnded{meeting_id}`,
+   estruturalmente idêntico para ejeção, empate e skip. Nenhuma mensagem ou
+   campo revela quem foi ejetado, o papel ou a contagem de votos.
+
+Cláusula explícita: o estado vivo/morto do ejetado torna-se público no
+`WorldSnapshot` seguinte (`alive=False`), indistinguível de uma morte por
+kill — como no Among Us original. É decisão de design, não vazamento: o
+sigilo proíbe entregar o resultado pela mensagem; inferência decorrente do
+comportamento futuro da partida (ex.: quem parou de se mover) está fora de
+escopo. Recusas de ação (`ActionDenied`) contra jogadores mortos usam código
+e razão uniformes (`NOT_ALIVE`), sem distinguir morte por kill de ejeção.
+
+Resposta à pergunta-chave: **um cliente não ejetado recebe, após a votação,
+`MeetingEnded{meeting_id}` e, no próximo snapshot, `alive=false` do ejetado —
+nada mais sobre a votação.** Garantido por `net/dispatch.py`
+(`dispatch_ejection`, ponto único da política) e por testes sobre os bytes
+serializados (`tests/test_secrecy_properties.py`,
+`tests/test_integration.py`).
 - **Feedback de ações:** ações aceitas confirmam com `ActionAccepted`
   (privado; `KILL` carrega o cooldown iniciado); recusas usam `ActionDenied`
   tipado (`ActionKind` + `DenialCode` + motivo textual + `retry_after_seconds`
@@ -137,7 +165,7 @@ Decisões de protocolo principais:
 ```bash
 uv run pytest                       # suíte completa (unitários + integração + Hypothesis + UI smoke)
 uv run ruff format --check . && uv run ruff check .
-uv run mypy .
+uv run mypy
 ```
 
 - Unidade: regras (kill, tarefas, vitória), votação, protocolo (roundtrip +
