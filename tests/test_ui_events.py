@@ -36,7 +36,13 @@ from codecon_amoung_us.protocol import (
     PlayerInfo,
     ProtocolError,
 )
-from codecon_amoung_us.ui.app import App, ConnectionFailure, ConnectionState, _movement_direction
+from codecon_amoung_us.ui.app import (
+    App,
+    ConnectionFailure,
+    ConnectionState,
+    Screen,
+    _movement_direction,
+)
 from codecon_amoung_us.ui.components import Button, ButtonState
 from codecon_amoung_us.ui.viewmodel import VoteUiState
 
@@ -106,7 +112,7 @@ def test_escape_in_game_returns_to_main(app: App) -> None:
         client.connect("127.0.0.1", server.port, "tester", timeout=5.0)
         app.client = client
         app.server = server
-        app.screen_name = "game"
+        app.screen_name = Screen.GAME
         app._handle_game_key(pygame.K_ESCAPE)
         assert app.screen_name == "main"
         assert app.client is None
@@ -124,7 +130,7 @@ def test_escape_in_voting_returns_to_main(app: App) -> None:
         voters=[0, 1],
         vote_timeout_seconds=30.0,
     )
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
     app._render_voting([event])
     assert app.screen_name == "main"
@@ -150,7 +156,7 @@ def test_protocol_error_tears_down_connection(app: App) -> None:
 
 
 def test_action_denied_shows_warning_in_lobby(app: App) -> None:
-    app.screen_name = "lobby"
+    app.screen_name = Screen.LOBBY
     app._handle_message(
         ActionDenied(
             action=ActionKind.START_GAME,
@@ -227,7 +233,7 @@ def test_cancel_connecting_returns_to_main(app: App) -> None:
     # porta sem servidor: a conexão ficaria pendente até timeout; cancelar
     # deve voltar imediatamente ao menu sem esperar o worker
     app.connection_state = ConnectionState.CONNECTING
-    app.screen_name = "connecting"
+    app.screen_name = Screen.CONNECTING
     app._cancel_connecting()
     assert app.connection_state.value == "idle"
     assert app.screen_name == "main"
@@ -279,7 +285,7 @@ def test_game_movement_sends_normalized_move(monkeypatch: pytest.MonkeyPatch, ap
 
 
 def test_action_denied_in_game_pushes_toast(app: App) -> None:
-    app.screen_name = "game"
+    app.screen_name = Screen.GAME
     app._handle_message(
         ActionDenied(
             action=ActionKind.KILL,
@@ -296,7 +302,7 @@ def test_action_denied_in_game_pushes_toast(app: App) -> None:
 
 
 def test_action_denied_in_voting_pushes_toast(app: App) -> None:
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     app._handle_message(
         ActionDenied(
             action=ActionKind.VOTE,
@@ -445,7 +451,7 @@ def test_ejected_meeting_ended_same_drain_shows_ejection(app: App) -> None:
     from codecon_amoung_us.game.model import Role
     from codecon_amoung_us.protocol import Ejected, MeetingEnded
 
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     _handle_drain(
         app,
         Ejected(player_id=1, role=Role.CREW),
@@ -461,7 +467,7 @@ def test_ejected_then_game_over_after_minimum_duration(app: App) -> None:
     from codecon_amoung_us.protocol import Ejected, GameOver, MeetingEnded
 
     app._ejected_min_duration = 2.5
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     _handle_drain(
         app,
         Ejected(player_id=1, role=Role.CREW),
@@ -483,7 +489,7 @@ def test_ejected_without_game_over_returns_to_game(app: App) -> None:
     from codecon_amoung_us.game.model import Role
     from codecon_amoung_us.protocol import Ejected, MeetingEnded
 
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     _handle_drain(app, Ejected(player_id=1, role=Role.CREW), MeetingEnded(meeting_id=1))
     assert app.screen_name == "ejected"
     app._update_transitions(now=app._ejection_started_at + 3.0)
@@ -495,7 +501,7 @@ def test_ejected_without_game_over_returns_to_game(app: App) -> None:
 def test_non_ejected_sees_generic_transition_then_game(app: App) -> None:
     from codecon_amoung_us.protocol import MeetingEnded
 
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     _handle_drain(app, MeetingEnded(meeting_id=1))
     assert app.screen_name == "meeting_ended"
     app._update_transitions(now=app._meeting_ended_at + 2.0)
@@ -506,7 +512,7 @@ def test_non_ejected_meeting_ended_game_over_same_drain(app: App) -> None:
     from codecon_amoung_us.game.model import Team
     from codecon_amoung_us.protocol import GameOver, MeetingEnded
 
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     _handle_drain(app, MeetingEnded(meeting_id=1), GameOver(winner=Team.CREW, players=[], roles={}))
     assert app.screen_name == "meeting_ended"
     assert app.pending_game_over is not None
@@ -536,7 +542,7 @@ def test_vote_selects_card_and_casts(app: App, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(client, "vote", lambda mid, target: sent.append((mid, target)))
     app.client = client
     # seleção via clique no card (posição do primeiro card do painel)
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     events = [pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(400, 300))]
     app._render_voting(events)
     assert app.vote_ui_state.value == "selecting"
@@ -559,7 +565,7 @@ def test_vote_confirmed_only_after_action_accepted(app: App) -> None:
 def test_vote_denied_returns_to_selecting_with_toast(app: App) -> None:
     app.meeting = _meeting()
     app.vote_ui_state = VoteUiState.SUBMITTING
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     app._handle_message(
         ActionDenied(
             action=ActionKind.VOTE,
@@ -659,7 +665,7 @@ def _enter_lobby_screen(app: App, *, is_host: bool = True) -> None:
     app.lobby_players = [LobbyPlayer(player_id=0, nickname="host")]
     app.my_id = 0
     app.host_id = 0
-    app.screen_name = "lobby"
+    app.screen_name = Screen.LOBBY
 
 
 def test_lobby_focus_persists_between_frames(app: App, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -716,7 +722,7 @@ def test_custom_screens_have_keyboard_navigation(app: App, monkeypatch: pytest.M
     escape = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
 
     # connecting: Cancelar focado; Enter cancela a tentativa
-    app.screen_name = "connecting"
+    app.screen_name = Screen.CONNECTING
     app._render_connecting([])
     buttons, _focus = app._single_ui_states["connecting"]
     assert buttons[0].focused is True
@@ -729,7 +735,7 @@ def test_custom_screens_have_keyboard_navigation(app: App, monkeypatch: pytest.M
         players=[PlayerInfo(player_id=0, nickname="a")],
         roles={0: Role.CREW},
     )
-    app.screen_name = "gameover"
+    app.screen_name = Screen.GAME_OVER
     app._render_gameover([])
     buttons, _focus = app._single_ui_states["gameover"]
     assert buttons[0].focused is True

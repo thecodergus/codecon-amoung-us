@@ -202,9 +202,6 @@ def _derive(
         game_map=_MAP,
         my_task_ids=task_ids or [],
         tasks_state=state,
-        kill_cooldown_until=None,
-        snapshot=_snapshot(me),
-        now=0.0,
     )
 
 

@@ -30,7 +30,7 @@ from codecon_amoung_us.protocol import (
     SnapshotPlayer,
     WorldSnapshot,
 )
-from codecon_amoung_us.ui.app import App
+from codecon_amoung_us.ui.app import App, Screen
 from codecon_amoung_us.ui.viewmodel import VoteUiState
 
 CAPTURES_DIR = Path(__file__).resolve().parent.parent / "captures"
@@ -73,7 +73,7 @@ def main() -> int:
         _save(app, "lobby_1_player")
 
         # gameplay crew / impostor / cooldown
-        app.screen_name = "game"
+        app.screen_name = Screen.GAME
         app.my_id = 0
         app.role = Role.CREW
         app.my_task_ids = [1]
@@ -122,7 +122,7 @@ def main() -> int:
             voters=[0, 1, 2],
             vote_timeout_seconds=30.0,
         )
-        app.screen_name = "voting"
+        app.screen_name = Screen.VOTING
         app._meeting_started_at = 0.0
         app.selected_vote_target = 1
         app._render([])
@@ -132,13 +132,13 @@ def main() -> int:
         _save(app, "voting_submitted")
 
         # ejeção privada
-        app.screen_name = "ejected"
+        app.screen_name = Screen.EJECTED
         app.private_ejection = Ejected(player_id=0, role=Role.CREW)
         app._render([])
         _save(app, "ejected")
 
         # game over
-        app.screen_name = "gameover"
+        app.screen_name = Screen.GAME_OVER
         app.game_over = GameOver(
             winner=Team.CREW,
             players=[
@@ -151,7 +151,7 @@ def main() -> int:
         _save(app, "game_over")
 
         # erro
-        app.screen_name = "error"
+        app.screen_name = Screen.ERROR
         app.error_message = "Não foi possível conectar: conexão recusada"
         app._render([])
         _save(app, "error")

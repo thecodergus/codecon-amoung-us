@@ -56,9 +56,6 @@ def derive_interaction_context(
     game_map: GameMap,
     my_task_ids: Sequence[int],
     tasks_state: TaskState | None,
-    kill_cooldown_until: float | None,
-    snapshot: WorldSnapshot | None,
-    now: float,
 ) -> InteractionContext | None:
     """Ação da tecla de interação (E): tarefa ou reunião de emergência.
 
@@ -276,11 +273,11 @@ def derive_game_hud(
                 primary_action = HudAction("SPACE", label, countdown=kill.cooldown_remaining)
             else:
                 primary_action = _nearby_report_action(me, snapshot) or _derive_interact(
-                    me, game_map, my_task_ids, tasks_state, kill_cooldown_until, snapshot, now
+                    me, game_map, my_task_ids, tasks_state
                 )
         else:
             primary_action = _nearby_report_action(me, snapshot) or _derive_interact(
-                me, game_map, my_task_ids, tasks_state, kill_cooldown_until, snapshot, now
+                me, game_map, my_task_ids, tasks_state
             )
 
     kill_cooldown_remaining = None
@@ -305,9 +302,6 @@ def _derive_interact(
     game_map: GameMap,
     my_task_ids: Sequence[int],
     tasks_state: TaskState | None,
-    kill_cooldown_until: float | None,
-    snapshot: WorldSnapshot | None,
-    now: float,
 ) -> HudAction | None:
     """Ação da tecla E como prompt (tarefa ou reunião)."""
     context = derive_interaction_context(
@@ -315,9 +309,6 @@ def _derive_interact(
         game_map=game_map,
         my_task_ids=my_task_ids,
         tasks_state=tasks_state,
-        kill_cooldown_until=kill_cooldown_until,
-        snapshot=snapshot,
-        now=now,
     )
     if context is None:
         return None

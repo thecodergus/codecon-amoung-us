@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from codecon_amoung_us.ui.app import App
+from codecon_amoung_us.ui.app import App, Screen
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
@@ -39,21 +39,24 @@ def test_app_boots_and_renders_every_screen(app: App) -> None:
     # tela de join
     app._open_join()
     app._render([])
+    # tela de configurações
+    app._open_settings()
+    app._render([])
     # lobby (mesmo sem conexão)
-    app.screen_name = "lobby"
+    app.screen_name = Screen.LOBBY
     app._current_menu = app.lobby_menu
     app._render([])
 
     # conectando (tela não bloqueante)
-    app.screen_name = "connecting"
+    app.screen_name = Screen.CONNECTING
     app._render([])
 
     # jogo (sem snapshot)
-    app.screen_name = "game"
+    app.screen_name = Screen.GAME
     app._render([])
 
     # votação (sem reunião -> só o fill)
-    app.screen_name = "voting"
+    app.screen_name = Screen.VOTING
     app._render([])
     # votação com reunião
     app.meeting = MeetingStarted(
@@ -62,21 +65,21 @@ def test_app_boots_and_renders_every_screen(app: App) -> None:
     app._render([])
 
     # ejeção privada
-    app.screen_name = "ejected"
+    app.screen_name = Screen.EJECTED
     app.private_ejection = Ejected(player_id=1, role=Role.CREW)
     app._render([])
 
     # transição genérica de reunião encerrada
-    app.screen_name = "meeting_ended"
+    app.screen_name = Screen.MEETING_ENDED
     app._render([])
 
     # game over
-    app.screen_name = "gameover"
+    app.screen_name = Screen.GAME_OVER
     app.game_over = GameOver(winner=Team.CREW, players=[], roles={})
     app._render([])
 
     # erro
-    app.screen_name = "error"
+    app.screen_name = Screen.ERROR
     app.error_message = "teste"
     app._render([])
 

@@ -76,7 +76,29 @@ from .viewmodel import (
     voting_layout,
 )
 
-__all__ = ["App", "main"]
+__all__ = ["App", "Screen", "main"]
+
+
+class Screen(StrEnum):
+    """Telas da aplicação (máquina de estados da UI).
+
+    ``StrEnum`` mantém compatibilidade com comparações contra strings em
+    testes e no script de captura; atribuições usam sempre os membros.
+    """
+
+    MAIN = "main"
+    HOST = "host"
+    JOIN = "join"
+    LOBBY = "lobby"
+    CONNECTING = "connecting"
+    GAME = "game"
+    VOTING = "voting"
+    EJECTED = "ejected"
+    MEETING_ENDED = "meeting_ended"
+    GAME_OVER = "gameover"
+    ERROR = "error"
+    SETTINGS = "settings"
+
 
 # Nome público do produto (fonte única para a UI e a janela).
 DISPLAY_NAME = "Codecon Lab • Among Ducks"
@@ -214,7 +236,7 @@ class App:
         self.renderer = Renderer(self.game_map, reduced_motion=self.ui_settings.reduced_motion)
 
         # estado de UI
-        self.screen_name = "main"
+        self.screen_name: Screen = Screen.MAIN
         self.error_message = ""
         self.is_host = False
         self.my_id: int | None = None
@@ -346,25 +368,25 @@ class App:
     # ------------------------------------------------------------------ navegação
 
     def _open_host(self) -> None:
-        self.screen_name = "host"
+        self.screen_name = Screen.HOST
         self._current_menu = self.menu_host
 
     def _open_join(self) -> None:
-        self.screen_name = "join"
+        self.screen_name = Screen.JOIN
         self._current_menu = self.menu_join
 
     def _open_settings(self) -> None:
-        self.screen_name = "settings"
+        self.screen_name = Screen.SETTINGS
         self._current_menu = self.menu_settings
 
     def _back_to_main(self) -> None:
-        self.screen_name = "main"
+        self.screen_name = Screen.MAIN
         self._current_menu = self.menu_main
 
     def _show_error(self, message: str) -> None:
         self.error_message = message
         self._single_ui_states.pop("error", None)
-        self.screen_name = "error"
+        self.screen_name = Screen.ERROR
 
     # ------------------------------------------------------------------ conexão
 
@@ -392,7 +414,7 @@ class App:
     ) -> None:
         """Inicia a conexão em thread; a UI continua renderizando."""
         self.connection_state = ConnectionState.CONNECTING
-        self.screen_name = "connecting"
+        self.screen_name = Screen.CONNECTING
         self._current_menu = None
         self._single_ui_states.pop("connecting", None)
         # Fila e evento por tentativa: resultados de tentativas canceladas caem
@@ -476,11 +498,11 @@ class App:
         if self._connection_thread is not None:
             self._connection_thread = None
         self.connection_state = ConnectionState.IDLE
-        self.screen_name = "main"
+        self.screen_name = Screen.MAIN
         self._current_menu = self.menu_main
 
     def _enter_lobby(self) -> None:
-        self.screen_name = "lobby"
+        self.screen_name = Screen.LOBBY
         self._current_menu = self.lobby_menu
         self._lobby_ui_state = None
         self._clear_lobby_warning()
@@ -505,7 +527,7 @@ class App:
 
     def _leave_lobby(self) -> None:
         self._shutdown_connection()
-        self.screen_name = "main"
+        self.screen_name = Screen.MAIN
         self._current_menu = self.menu_main
 
     def _shutdown_connection(self) -> None:
@@ -538,7 +560,7 @@ class App:
     def _exit_to_main(self) -> None:
         """Encerra a conexão e retorna ao menu principal (padrão de saída)."""
         self._shutdown_connection()
-        self.screen_name = "main"
+        self.screen_name = Screen.MAIN
         self._current_menu = self.menu_main
 
     # ------------------------------------------------------------------ rede
@@ -561,7 +583,7 @@ class App:
         elif isinstance(message, PlayerDisconnected):
             self.lobby_players = [p for p in self.lobby_players if p.player_id != message.player_id]
         elif isinstance(message, StartGame):
-            self.screen_name = "game"
+            self.screen_name = Screen.GAME
             self.lobby_players = []
             self._nicknames.update({p.player_id: p.nickname for p in message.players})
         elif isinstance(message, RoleAssigned):
@@ -576,28 +598,31 @@ class App:
             self._voting_cursor = 0
             self._voting_buttons = None
             self._meeting_started_at = time.monotonic()
-            self.screen_name = "voting"
+            self.screen_name = Screen.VOTING
         elif isinstance(message, MeetingEnded):
             self.meeting = None
             # O ejetado permanece na tela de ejeção privada; os demais veem a
             # transição genérica (idêntica para ejeção, empate e skip).
-            if self.screen_name != "ejected" and self.screen_name != "meeting_ended":
-                self.screen_name = "meeting_ended"
+            if (
+                self.screen_name is not Screen.EJECTED
+                and self.screen_name is not Screen.MEETING_ENDED
+            ):
+                self.screen_name = Screen.MEETING_ENDED
                 self._meeting_ended_at = time.monotonic()
         elif isinstance(message, Ejected):
             self.private_ejection = message
-            if self.screen_name != "ejected":
-                self.screen_name = "ejected"
+            if self.screen_name is not Screen.EJECTED:
+                self.screen_name = Screen.EJECTED
                 self._ejection_started_at = time.monotonic()
         elif isinstance(message, GameOver):
             self.game_over = message
             self._single_ui_states.pop("gameover", None)
             # GameOver pode chegar no mesmo ciclo que Ejected/MeetingEnded;
             # a apresentação da ejeção tem prioridade (duração mínima).
-            if self.screen_name in ("ejected", "meeting_ended"):
+            if self.screen_name in (Screen.EJECTED, Screen.MEETING_ENDED):
                 self.pending_game_over = message
             else:
-                self.screen_name = "gameover"
+                self.screen_name = Screen.GAME_OVER
         elif isinstance(message, ProtocolError):
             # Erro de protocolo encerra a sessão: derruba client e server
             # embutido (host) antes de mostrar o erro — evita conexão órfã.
@@ -623,9 +648,9 @@ class App:
             if message.action is ActionKind.VOTE:
                 # voto recusado: volta para a seleção (nunca parece registrado)
                 self.vote_ui_state = VoteUiState.SELECTING
-            if self.screen_name == "lobby":
+            if self.screen_name is Screen.LOBBY:
                 self.lobby_warning_label.set_title(message.reason)
-            elif self.screen_name in ("game", "voting"):
+            elif self.screen_name in (Screen.GAME, Screen.VOTING):
                 self._push_toast(_denial_text(message.code, message.reason))
         elif isinstance(message, WorldSnapshot):
             with self._snapshot_lock:
@@ -698,43 +723,43 @@ class App:
         argumento (relógio real).
         """
         now = time.monotonic() if now is None else now
-        if self.screen_name == "ejected" and (
+        if self.screen_name is Screen.EJECTED and (
             now - self._ejection_started_at >= self._ejected_min_duration
         ):
             if self.pending_game_over is not None:
-                self.screen_name = "gameover"
+                self.screen_name = Screen.GAME_OVER
             else:
-                self.screen_name = "meeting_ended"
+                self.screen_name = Screen.MEETING_ENDED
                 self._meeting_ended_at = now
-        elif self.screen_name == "meeting_ended" and (
+        elif self.screen_name is Screen.MEETING_ENDED and (
             now - self._meeting_ended_at >= self._meeting_ended_min_duration
         ):
             if self.pending_game_over is not None:
-                self.screen_name = "gameover"
+                self.screen_name = Screen.GAME_OVER
             else:
-                self.screen_name = "game"
+                self.screen_name = Screen.GAME
 
     def _render(self, events: list[pygame.event.Event]) -> None:
-        if self.screen_name in ("main", "host", "join", "settings"):
+        if self.screen_name in (Screen.MAIN, Screen.HOST, Screen.JOIN, Screen.SETTINGS):
             menu = self._current_menu
             if menu is not None:
                 menu.update(events)
                 menu.draw(self.screen)
-        elif self.screen_name == "lobby":
+        elif self.screen_name is Screen.LOBBY:
             self._render_lobby(events)
-        elif self.screen_name == "game":
+        elif self.screen_name is Screen.GAME:
             self._render_game(events)
-        elif self.screen_name == "voting":
+        elif self.screen_name is Screen.VOTING:
             self._render_voting(events)
-        elif self.screen_name == "connecting":
+        elif self.screen_name is Screen.CONNECTING:
             self._render_connecting(events)
-        elif self.screen_name == "ejected":
+        elif self.screen_name is Screen.EJECTED:
             self._render_ejected(events)
-        elif self.screen_name == "meeting_ended":
+        elif self.screen_name is Screen.MEETING_ENDED:
             self._render_meeting_ended(events)
-        elif self.screen_name == "gameover":
+        elif self.screen_name is Screen.GAME_OVER:
             self._render_gameover(events)
-        elif self.screen_name == "error":
+        elif self.screen_name is Screen.ERROR:
             self._render_error(events)
 
     def _refresh_lobby(self) -> None:
@@ -917,7 +942,6 @@ class App:
         me = next((p for p in snapshot.players if p.player_id == self.my_id), None)
         if me is None or not me.alive:
             return
-        now = time.monotonic()
         if key == pygame.K_r:
             # reportar corpo mais próximo (mesmo raio do servidor)
             body_id = derive_report_target(me=me, snapshot=snapshot)
@@ -933,9 +957,6 @@ class App:
                 game_map=self.game_map,
                 my_task_ids=self.my_task_ids,
                 tasks_state=self.tasks_state,
-                kill_cooldown_until=self.kill_cooldown_until,
-                snapshot=snapshot,
-                now=now,
             )
             if context is None:
                 return
