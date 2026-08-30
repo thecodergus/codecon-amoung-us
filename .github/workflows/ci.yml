@@ -45,6 +45,32 @@ jobs:
         run: uv audit
         continue-on-error: true
 
+  test-pure:
+    name: Paridade modo puro (sem extensões Cython)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv + Python 3.13
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      # CODECON_SKIP_NATIVE=1: setup.py não compila e remove .so residuais;
+      # a suíte inteira deve passar idêntica sem as extensões (paridade).
+      - name: Sync dependências (pacote puro)
+        run: uv sync --frozen
+        env:
+          CODECON_SKIP_NATIVE: "1"
+
+      - name: pytest (modo puro)
+        run: uv run pytest
+        env:
+          SDL_VIDEODRIVER: dummy
+
+      - name: smoke multiplayer E2E (modo puro)
+        run: uv run python scripts/smoke_multiplayer.py
+
   assets-freshness:
     name: Frescor dos assets gerados
     runs-on: ubuntu-latest

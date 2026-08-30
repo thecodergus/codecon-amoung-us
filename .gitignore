@@ -6,3 +6,9 @@ __pycache__/
 captures/
 .opencode/
 *.xml
+*.so
+/build/
+/dist/
+*.egg-info/
+src/**/*.c
+src/**/*.html
