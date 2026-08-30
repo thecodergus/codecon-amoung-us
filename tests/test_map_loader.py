@@ -7,6 +7,7 @@ import json
 import pytest
 
 from codecon_amoung_us.config import default_map_path
+from codecon_amoung_us.game.task_catalog import TASK_TYPES
 from codecon_amoung_us.map.loader import MapError, load_map
 from codecon_amoung_us.map.model import GameMap
 
@@ -18,8 +19,8 @@ def game_map() -> GameMap:
 
 def test_loads_real_asset(game_map: GameMap) -> None:
     assert game_map.name == "lab"
-    assert game_map.width == 40
-    assert game_map.height == 22
+    assert game_map.width == 70
+    assert game_map.height == 38
     assert game_map.tile_width == 64
     assert game_map.tile_height == 64
 
@@ -37,9 +38,9 @@ def test_spawn_points_with_ids(game_map: GameMap) -> None:
 
 
 def test_task_points_with_properties(game_map: GameMap) -> None:
-    assert len(game_map.task_points) == 10
+    assert len(game_map.task_points) == 14
     by_type = {t.task_type for t in game_map.task_points}
-    assert {"wires", "swipe_card", "fix_wiring", "calibrate", "clean_filter"} <= by_type
+    assert set(TASK_TYPES) <= by_type
     # interaction_radius veio da propriedade customizada do Tiled
     assert all(t.interaction_radius == 20.0 for t in game_map.task_points)
 
@@ -103,4 +104,4 @@ def test_missing_required_layer_raises(tmp_path: object) -> None:
 
 def test_bounds(game_map: GameMap) -> None:
     left, top, right, bottom = game_map.bounds()
-    assert (left, top, right, bottom) == (0.0, 0.0, 2560.0, 1408.0)
+    assert (left, top, right, bottom) == (0.0, 0.0, 4480.0, 2432.0)

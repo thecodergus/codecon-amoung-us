@@ -1,7 +1,7 @@
 """Regressão visual golden-image (SDL dummy, comparação pixel-exata).
 
 Compara estados-chave renderizados — menu principal e gameplay com a câmera
-no centro e nos quatro cantos do mapa 2560x1408 — com baselines commitadas
+no centro e nos quatro cantos do mapa 4480x2432 — com baselines commitadas
 em ``tests/baselines/``. Converte a inspeção manual de capturas em gate
 automatizado: qualquer mudança de renderização (cena, câmera, sprites, HUD,
 menu) falha o teste.
@@ -37,11 +37,11 @@ BASELINES_DIR = Path(__file__).parent / "baselines"
 
 # Posições da câmera/jogador local por estado (coordenadas de mundo).
 _POSITIONS: dict[str, tuple[float, float]] = {
-    "cam_center": (1248.0, 700.0),  # hub: jogador centralizado no viewport
+    "cam_center": (2208.0, 1120.0),  # hub: jogador centralizado no viewport
     "cam_corner_tl": (40.0, 40.0),
-    "cam_corner_tr": (2520.0, 40.0),
-    "cam_corner_bl": (40.0, 1368.0),
-    "cam_corner_br": (2520.0, 1368.0),
+    "cam_corner_tr": (4440.0, 40.0),
+    "cam_corner_bl": (40.0, 2392.0),
+    "cam_corner_br": (4440.0, 2392.0),
 }
 _STATES = ["main_menu", *_POSITIONS]
 

@@ -1,8 +1,9 @@
-"""Validação estrutural do mapa lab expandido (asset commitado).
+"""Validação estrutural do mapa lab triplicado (asset commitado).
 
 Espelha os gates do ``scripts/build_lab_map.py`` contra o asset vigente:
-mundo maior que o viewport nos dois eixos, área >= 2x a anterior, salas
-mínimas, componente caminhável único e alcançabilidade por caminho (BFS —
+mundo maior que o viewport nos dois eixos, área >= 6x a do mapa original,
+área caminhável >= 1000 células (~3x o baseline de 370), salas mínimas,
+componente caminhável único e alcançabilidade por caminho (BFS —
 nunca linha reta) de todos os pontos de gameplay.
 """
 
@@ -13,12 +14,13 @@ from collections import deque
 import pytest
 
 from codecon_amoung_us.config import MAX_PLAYERS, default_map_path
+from codecon_amoung_us.game.task_catalog import TASK_TYPES
 from codecon_amoung_us.map.loader import load_map
 from codecon_amoung_us.map.model import GameMap
 
 # Viewport lógico de gameplay (canvas 1280x768 menos a faixa do HUD).
 VIEWPORT_W, VIEWPORT_H = 1280, 704
-# Área do mapa anterior (20x11 tiles de 64 px).
+# Área do mapa original (20x11 tiles de 64 px).
 OLD_AREA = 1280 * 704
 
 
@@ -71,13 +73,19 @@ def test_map_exceeds_viewport_in_both_axes(game_map: GameMap) -> None:
     assert bottom > VIEWPORT_H
 
 
-def test_map_area_at_least_double_previous(game_map: GameMap) -> None:
+def test_map_area_at_least_6x_original(game_map: GameMap) -> None:
     _left, _top, right, bottom = game_map.bounds()
-    assert right * bottom >= 2 * OLD_AREA
+    assert right * bottom >= 6 * OLD_AREA
+
+
+def test_walkable_area_at_least_1000_cells(game_map: GameMap) -> None:
+    grid = _walkable_grid(game_map)
+    total = sum(row.count(True) for row in grid)
+    assert total >= 1000
 
 
 def test_minimum_room_count(game_map: GameMap) -> None:
-    assert len(game_map.rooms) >= 6
+    assert len(game_map.rooms) >= 10
 
 
 def test_enough_spawns_for_max_players(game_map: GameMap) -> None:
@@ -123,7 +131,13 @@ def test_tasks_spread_across_rooms(game_map: GameMap) -> None:
         for room in game_map.rooms
         if room.rect.contains(task.x, task.y)
     }
-    assert len(rooms_of_tasks) >= 4
+    assert len(rooms_of_tasks) >= 6
+
+
+def test_all_task_types_covered(game_map: GameMap) -> None:
+    """Todo tipo do catálogo tem pelo menos um ponto no mapa."""
+    types_on_map = {task.task_type for task in game_map.task_points}
+    assert types_on_map == set(TASK_TYPES)
 
 
 def test_emergency_button_in_room(game_map: GameMap) -> None:

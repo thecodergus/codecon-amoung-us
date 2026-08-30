@@ -1,7 +1,7 @@
 """Constrói o mapa do lab a partir de um layout declarado de salas e corredores.
 
-O layout é autorado neste script como retângulos de células (grade 40x22 de
-64 px -> mundo 2560x1408): 7 salas nomeadas ligadas por corredores em anel e
+O layout é autorado neste script como retângulos de células (grade 70x38 de
+64 px -> mundo 4480x2432): 12 salas nomeadas ligadas por corredores em anel e
 raios até o hub central, formando ciclos (não é um mapa linear). A cena
 ``assets/maps/lab_scene.png`` é composta deterministicamente com tiles do
 pack "Top Down Lab" (ansimuz) — ``models/mapa/Top Down Lab files/Tileset.png``
@@ -13,8 +13,8 @@ task_points, emergency_meeting, rooms). Também gera
 
 O script é determinístico e reexecutável (idempotente) e falha (exit != 0)
 se qualquer gate de validação não passar: mundo maior que o viewport nos
-dois eixos e com pelo menos o dobro da área anterior, quantidade mínima de
-salas, componente caminhável único (BFS), alcançabilidade de todos os pontos
+dois eixos e com pelo menos 6x a área do mapa original, quantidade mínima
+de salas e de células caminháveis, componente caminhável único (BFS), alcançabilidade de todos os pontos
 de gameplay (spawns, tarefas, emergência) por caminho, distâncias mínimas
 entre pontos, distribuição de tarefas por múltiplas salas, ciclo no grafo
 sala/corredor e paredes válidas. A colisão deriva apenas do JSON — a imagem
@@ -42,69 +42,77 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame  # noqa: E402
 
 from codecon_amoung_us.config import MAX_PLAYERS  # noqa: E402
+from codecon_amoung_us.game.task_catalog import TASK_TYPES as _TASK_TYPES  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuração do mundo.
 # ---------------------------------------------------------------------------
 _TILE = 64
-_MAP_W = 40
-_MAP_H = 22
+_MAP_W = 70
+_MAP_H = 38
 # Viewport de gameplay (canvas lógico 1280x768 menos a faixa do HUD).
 _VIEWPORT_W = 1280
 _VIEWPORT_H = 704
-# Baseline do mapa anterior (20x11 tiles de 64 px) para o gate de área.
+# Baseline do mapa original (20x11 tiles de 64 px) para o gate de área.
 _OLD_AREA = 1280 * 704
-# Tipos de tarefa (mesmos do skeld.json), ciclicamente atribuídos.
-_TASK_TYPES = ["wires", "swipe_card", "fix_wiring", "calibrate", "clean_filter"]
 
 # ---------------------------------------------------------------------------
 # Layout declarado (retângulos de células: nome, x, y, w, h).
 # ---------------------------------------------------------------------------
 _ROOMS: list[tuple[str, int, int, int, int]] = [
-    ("medbay", 3, 3, 8, 5),
-    ("laboratorio", 16, 2, 8, 4),
-    ("eletrica", 29, 3, 8, 5),
-    ("hub", 16, 9, 8, 5),
-    ("reator", 3, 14, 8, 5),
-    ("analise", 16, 16, 8, 4),
-    ("armazem", 29, 14, 8, 5),
+    ("medbay", 3, 3, 10, 6),
+    ("laboratorio", 18, 2, 10, 5),
+    ("eletrica", 33, 3, 10, 6),
+    ("navegacao", 50, 2, 12, 6),
+    ("seguranca", 4, 14, 8, 6),
+    ("hub", 28, 14, 14, 8),
+    ("oxigenio", 54, 14, 10, 6),
+    ("reator", 3, 28, 10, 6),
+    ("analise", 18, 29, 10, 5),
+    ("armazem", 33, 28, 10, 6),
+    ("motores", 48, 29, 10, 5),
+    ("comunicacao", 61, 28, 7, 6),
 ]
 _CORRIDORS: list[tuple[str, int, int, int, int]] = [
-    ("corr_n", 11, 4, 18, 2),  # medbay <-> laboratorio <-> eletrica
-    ("corr_s", 11, 17, 18, 2),  # reator <-> analise <-> armazem
-    ("corr_w", 6, 8, 2, 6),  # medbay <-> reator
-    ("corr_e", 32, 8, 2, 6),  # eletrica <-> armazem
-    ("spoke_n", 19, 6, 2, 3),  # laboratorio -> hub
-    ("spoke_s", 19, 14, 2, 2),  # hub -> analise
-    ("spoke_w", 8, 10, 8, 2),  # corr_w -> hub
-    ("spoke_e", 24, 10, 8, 2),  # hub -> corr_e
+    ("corr_n", 13, 5, 37, 3),  # medbay <-> laboratorio <-> eletrica <-> navegacao
+    ("corr_s", 13, 29, 48, 3),  # reator <-> analise <-> armazem <-> motores <-> comunicacao
+    ("corr_w", 7, 9, 3, 19),  # medbay <-> seguranca <-> reator
+    ("corr_e", 56, 8, 2, 21),  # navegacao <-> oxigenio <-> motores
+    ("spoke_n", 32, 7, 3, 7),  # corr_n/eletrica -> hub
+    ("spoke_s", 32, 22, 3, 6),  # hub -> armazem
+    ("spoke_w", 8, 16, 20, 3),  # corr_w/seguranca -> hub
+    ("spoke_e", 40, 16, 16, 3),  # hub -> oxigenio/corr_e
 ]
 
 # Pontos de gameplay autorados (células), distribuídos pelas salas.
 _SPAWNS: list[tuple[int, int]] = [
-    (17, 10),  # hub
-    (22, 12),  # hub
-    (6, 5),  # medbay
-    (8, 6),  # medbay
-    (21, 3),  # laboratorio
-    (31, 4),  # eletrica
-    (34, 6),  # eletrica
-    (6, 17),  # reator
-    (17, 18),  # analise
-    (32, 17),  # armazem
+    (30, 16),  # hub
+    (37, 16),  # hub
+    (30, 20),  # hub
+    (37, 20),  # hub
+    (6, 6),  # medbay
+    (22, 5),  # laboratorio
+    (38, 6),  # eletrica
+    (7, 31),  # reator
+    (36, 31),  # armazem
+    (56, 5),  # navegacao
 ]
-_EMERGENCY: tuple[int, int] = (19, 11)  # centro do hub
+_EMERGENCY: tuple[int, int] = (34, 17)  # centro do hub
 _TASKS: list[tuple[int, int]] = [
-    (4, 3),  # medbay
-    (9, 3),  # medbay
-    (17, 3),  # laboratorio
-    (30, 6),  # eletrica
-    (35, 4),  # eletrica
-    (4, 15),  # reator
-    (8, 15),  # reator
-    (21, 18),  # analise
-    (30, 15),  # armazem
-    (35, 17),  # armazem
+    (4, 4),  # medbay
+    (10, 4),  # medbay
+    (19, 3),  # laboratorio
+    (25, 3),  # laboratorio
+    (34, 7),  # eletrica
+    (41, 4),  # eletrica
+    (4, 29),  # reator
+    (11, 32),  # reator
+    (19, 30),  # analise
+    (41, 32),  # armazem
+    (49, 30),  # motores
+    (51, 3),  # navegacao
+    (62, 29),  # comunicacao
+    (55, 15),  # oxigenio
 ]
 
 # ---------------------------------------------------------------------------
@@ -228,16 +236,20 @@ def cell_center(cell: tuple[int, int]) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 def validate(regions: dict[str, set[tuple[int, int]]], walk: set[tuple[int, int]]) -> None:
     """Falha com ``BuildError`` se qualquer invariante do mapa não valer."""
-    # Mundo excede o viewport nos dois eixos e área >= 2x a anterior.
+    # Mundo excede o viewport nos dois eixos e área >= 6x a do mapa original.
     world_w, world_h = _MAP_W * _TILE, _MAP_H * _TILE
     if world_w <= _VIEWPORT_W or world_h <= _VIEWPORT_H:
         raise BuildError(f"mundo {world_w}x{world_h} não excede o viewport nos dois eixos")
-    if world_w * world_h < 2 * _OLD_AREA:
-        raise BuildError(f"área {world_w * world_h} menor que 2x a anterior ({2 * _OLD_AREA})")
+    if world_w * world_h < 6 * _OLD_AREA:
+        raise BuildError(f"área {world_w * world_h} menor que 6x a original ({6 * _OLD_AREA})")
+
+    # Área caminhável efetiva: pelo menos ~3x o baseline do mapa 40x22 (370 células).
+    if len(walk) < 1000:
+        raise BuildError(f"área caminhável pequena demais: {len(walk)} células (mínimo 1000)")
 
     # Salas: quantidade mínima, nomes únicos, retângulos disjuntos.
-    if len(_ROOMS) < 6:
-        raise BuildError(f"poucas salas: {len(_ROOMS)} (mínimo 6)")
+    if len(_ROOMS) < 10:
+        raise BuildError(f"poucas salas: {len(_ROOMS)} (mínimo 10)")
     names = [name for name, *_ in _ROOMS]
     if len(set(names)) != len(names):
         raise BuildError("nomes de sala duplicados")
@@ -277,8 +289,10 @@ def validate(regions: dict[str, set[tuple[int, int]]], walk: set[tuple[int, int]
     if len(_SPAWNS) < MAX_PLAYERS:
         raise BuildError(f"spawns insuficientes: {len(_SPAWNS)} < MAX_PLAYERS={MAX_PLAYERS}")
     task_rooms = {room_of(cell) for cell in _TASKS} - {None}
-    if len(task_rooms) < 4:
-        raise BuildError(f"tarefas concentradas: apenas {len(task_rooms)} salas (mínimo 4)")
+    if len(task_rooms) < 6:
+        raise BuildError(f"tarefas concentradas: apenas {len(task_rooms)} salas (mínimo 6)")
+    if len(_TASKS) < len(_TASK_TYPES):
+        raise BuildError(f"tarefas insuficientes: {len(_TASKS)} < {len(_TASK_TYPES)} tipos")
 
     # Topologia não linear: grafo sala/corredor com pelo menos um ciclo.
     if not _region_graph_has_cycle(regions):
@@ -430,7 +444,11 @@ def build_lab_json(
                 "x": px,
                 "y": py,
                 "properties": [
-                    {"name": "task_type", "type": "string", "value": _TASK_TYPES[index % 5]},
+                    {
+                        "name": "task_type",
+                        "type": "string",
+                        "value": _TASK_TYPES[index % len(_TASK_TYPES)],
+                    },
                     {"name": "interaction_radius", "type": "float", "value": 20.0},
                 ],
                 "visible": True,
@@ -526,7 +544,7 @@ def build_lab_json(
 def compose_scene(
     regions: dict[str, set[tuple[int, int]]], walk: set[tuple[int, int]]
 ) -> pygame.Surface:
-    """Renderiza o mundo 2560x1408 com tiles do pack (1 célula = 1 tile x4).
+    """Renderiza o mundo com tiles do pack (1 célula = 1 tile x4).
 
     Regras: caminhável -> piso teal (portas com faixa de segurança); parede
     com vizinho caminhável ao sul -> banda de maquinário; parede logo abaixo

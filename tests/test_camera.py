@@ -13,9 +13,9 @@ import pytest
 
 from codecon_amoung_us.ui.camera import DT_MAX, Camera2D
 
-# Mundo do lab expandido: 2560x1408; viewport de gameplay 1280x704.
+# Mundo do lab triplicado: 4480x2432; viewport de gameplay 1280x704.
 VIEWPORT = (1280.0, 704.0)
-BOUNDS = (0.0, 0.0, 2560.0, 1408.0)
+BOUNDS = (0.0, 0.0, 4480.0, 2432.0)
 
 
 @pytest.fixture
@@ -43,9 +43,9 @@ def test_centering_away_from_borders(camera: Camera2D) -> None:
     ("player", "expected_offset"),
     [
         ((32.0, 32.0), (0, 0)),  # canto superior esquerdo
-        ((2528.0, 32.0), (2560 - 1280, 0)),  # canto superior direito
-        ((32.0, 1376.0), (0, 1408 - 704)),  # canto inferior esquerdo
-        ((2528.0, 1376.0), (2560 - 1280, 1408 - 704)),  # canto inferior direito
+        ((4448.0, 32.0), (4480 - 1280, 0)),  # canto superior direito
+        ((32.0, 2400.0), (0, 2432 - 704)),  # canto inferior esquerdo
+        ((4448.0, 2400.0), (4480 - 1280, 2432 - 704)),  # canto inferior direito
     ],
 )
 def test_clamp_corners(
