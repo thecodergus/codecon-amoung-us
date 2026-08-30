@@ -28,8 +28,11 @@ conecta em um servidor standalone (`127.0.0.1:5555` por padrão, configurável
 na tela de join). A conexão acontece em thread própria (a interface continua
 responsiva e exibe "Conectando ao servidor…", cancelável). A tela de jogo
 mostra a cena do lab com os personagens duckee (8 cores, animações
-idle/walk/death) e um HUD inferior compacto (~64 px) com papel, progresso de
-tarefas, vivos, cooldown do impostor e prompt contextual de ação.
+idle/walk/death com relógio por jogador e posição suavizada), as estações de
+tarefa como objetos do mundo (um desenho por tipo de tarefa; a sua estação
+ganha tag/halo e "!" ao ficar interagível) e um HUD inferior compacto
+(~64 px) com papel, progresso de tarefas, vivos, cooldown do impostor e
+prompt contextual de ação.
 
 Servidor standalone:
 
@@ -54,7 +57,9 @@ uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 \
 
 Tarefas são minigames obrigatórios (7 tipos: ligar fios, reparar circuito,
 passar cartão, calibrar sensores, limpar filtro, reativar reator, destruir
-asteroides): a conclusão só vai ao servidor depois de resolver o puzzle.
+asteroides): cada tripulante recebe 6 tarefas por partida (tipos podem se
+repetir — o mapa tem 4 instâncias de cada) e a conclusão só vai ao servidor
+depois de resolver o puzzle.
 O mundo não pausa com o puzzle aberto — morrer ou iniciar reunião fecha o
 minigame sem completar a tarefa.
 
@@ -105,14 +110,19 @@ src/codecon_amoung_us/
                      (GameClient: usado pela UI; helpers p/ testes e smoke)
                      + dispatch.py (sigilo)
   ui/                app.py (App, menus, jogo, votação) + render.py +
-                     sprites.py (duckee) + puzzles/ (7 minigames de tarefa:
+                     sprites.py (duckee) + task_props.py (estações) +
+                     puzzles/ (7 minigames de tarefa:
                      lógica pura testável + wrapper pygame)
 assets/maps/lab.json      mapa Tiled (70x38, 64px, 4480x2432): paredes, spawns,
-                          14 tarefas (7 tipos), botão de emergência, 12 salas —
+                          28 estações de tarefa (7 tipos, 4 instâncias de cada),
+                          botão de emergência, 12 salas —
                           gerado pelo build_lab_map.py
 assets/maps/lab_scene.png cena do lab em resolução de mundo (fundo do jogo)
 assets/maps/skeld.json    mapa Tiled legado (40x30, 32px) — suportado pelo
                           loader, não é mais o padrão
+assets/tasks/             sprites 64x64 das estações de tarefa (um objeto por
+                          tipo: fios, cartão, reator etc.) + botão de
+                          emergência — gerados pelo build_task_props.py
 models/duckee/            sprites dos personagens (8 cores, idle/walk/death)
 models/mapa/              pack do mapa "Top Down Lab", de Luis Zuno
                           (@ansimuz — ansimuz.itch.io; licença permissiva em
@@ -120,6 +130,8 @@ models/mapa/              pack do mapa "Top Down Lab", de Luis Zuno
                           da cena + overlay de QA
 scripts/build_lab_map.py  gera assets/maps/lab.json + cena 2560x1408 a
                           partir do layout declarado de salas/corredores
+scripts/build_task_props.py   gera assets/tasks/*.png (estações como objetos
+                          pixel-art coerentes com o tileset do pack)
 scripts/smoke_multiplayer.py   smoke headless da Etapa 14
 tests/               pytest: unitários, Hypothesis, integração, UI smoke
 plans/among-us-mvp.md plano de execução (decisões de protocolo e etapas)
