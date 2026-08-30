@@ -20,6 +20,11 @@ entre pontos, distribuição de tarefas por múltiplas salas, ciclo no grafo
 sala/corredor e paredes válidas. A colisão deriva apenas do JSON — a imagem
 é puramente visual.
 
+Modo ``--check`` (gate de frescor para CI): regenera os artefatos em memória
+e compara com os commitados (``lab.json`` byte-a-byte; PNGs por pixels
+decodificados, imune a variação de encoder), sem escrever nada — exit != 0
+com a lista de assets dessincronizados.
+
 Sem dependências novas: usa apenas pygame para ler/escrever pixels.
 """
 
@@ -577,11 +582,11 @@ def compose_scene(
     return scene
 
 
-def draw_overlay(
+def overlay_surface(
     scene: pygame.Surface,
     walls: list[tuple[int, int, int, int]],
-) -> None:
-    """Gera overlay-lab.png: cena + paredes magenta + marcadores (QA humana)."""
+) -> pygame.Surface:
+    """Cena + paredes magenta + marcadores (QA humana)."""
     canvas = scene.copy()
     overlay = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
     for x, y, w, h in walls:
@@ -598,38 +603,91 @@ def draw_overlay(
         pygame.draw.circle(canvas, (255, 220, 80), (int(px), int(py)), 8, 3)
     ex, ey = cell_center(_EMERGENCY)
     pygame.draw.circle(canvas, (255, 60, 60), (int(ex), int(ey)), 12, 3)
-    pygame.image.save(canvas, str(_OUT_OVERLAY))
+    return canvas
 
 
-def save_menu_crop(scene: pygame.Surface) -> None:
+def menu_crop(scene: pygame.Surface) -> pygame.Surface:
     """Crop 1280x704 centrado no hub (fundo dos menus, sem distorção)."""
     hx, hy = cell_center(_EMERGENCY)
     left = min(max(int(hx) - _VIEWPORT_W // 2, 0), _MAP_W * _TILE - _VIEWPORT_W)
     top = min(max(int(hy) - _VIEWPORT_H // 2, 0), _MAP_H * _TILE - _VIEWPORT_H)
-    crop = scene.subsurface((left, top, _VIEWPORT_W, _VIEWPORT_H)).copy()
-    pygame.image.save(crop, str(_OUT_MENU))
+    return scene.subsurface((left, top, _VIEWPORT_W, _VIEWPORT_H)).copy()
+
+
+def _generate() -> tuple[
+    dict[str, object], pygame.Surface, set[tuple[int, int]], list[tuple[int, int, int, int]]
+]:
+    """Gera os artefatos em memória: documento do mapa, cena, caminhável e paredes."""
+    regions = region_cells()
+    walk = walkable_cells(regions)
+    validate(regions, walk)
+    walls = blocked_rects(walk)
+    if len(walls) < 3:
+        raise BuildError(f"poucas paredes extraídas: {len(walls)}")
+    for x, y, w, h in walls:
+        if w < 1 or h < 1:
+            raise BuildError(f"parede degenerada: {(x, y, w, h)}")
+    return build_lab_json(walls), compose_scene(regions, walk), walk, walls
+
+
+def _png_pixels_equal(path: Path, surface: pygame.Surface) -> bool:
+    """True se o PNG em ``path`` decodifica para os mesmos pixels de ``surface``.
+
+    Comparação por RGB decodificado (PNG é lossless): imune a diferenças de
+    encoder entre versões de SDL/libpng e plataformas. O canal alfa é
+    ignorado de propósito: as superfícies geradas são 32 bits sem SRCALPHA e
+    o PNG commitado é 24 bits — o alfa é descartado na escrita e não carrega
+    conteúdo.
+    """
+    if not path.is_file():
+        return False
+    loaded = pygame.image.load(str(path))
+    return loaded.get_size() == surface.get_size() and (
+        pygame.image.tobytes(loaded, "RGB") == pygame.image.tobytes(surface, "RGB")
+    )
+
+
+def check_freshness() -> int:
+    """Gate de frescor: regenera os artefatos e compara com os commitados.
+
+    Não escreve nada. Exit != 0 com a lista de assets dessincronizados
+    (regenerar com ``uv run python scripts/build_lab_map.py``).
+    """
+    pygame.init()
+    try:
+        map_doc, scene, _walk, walls = _generate()
+        stale: list[str] = []
+        map_text = json.dumps(map_doc, indent=2)
+        if not _OUT_MAP.is_file() or _OUT_MAP.read_text(encoding="utf-8") != map_text:
+            stale.append(_OUT_MAP.relative_to(_REPO).as_posix())
+        if not _png_pixels_equal(_OUT_SCENE, scene):
+            stale.append(_OUT_SCENE.relative_to(_REPO).as_posix())
+        if not _png_pixels_equal(_OUT_MENU, menu_crop(scene)):
+            stale.append(_OUT_MENU.relative_to(_REPO).as_posix())
+        if not _png_pixels_equal(_OUT_OVERLAY, overlay_surface(scene, walls)):
+            stale.append(_OUT_OVERLAY.relative_to(_REPO).as_posix())
+        if stale:
+            print(f"ERRO: assets dessincronizados com o builder: {', '.join(stale)}")
+            print("regenere com: uv run python scripts/build_lab_map.py")
+            return 1
+        print("assets sincronizados com o builder (lab.json + 3 PNGs)")
+        return 0
+    except BuildError as exc:
+        print(f"ERRO: {exc}")
+        return 1
+    finally:
+        pygame.quit()
 
 
 def main() -> int:
     pygame.init()
     try:
-        regions = region_cells()
-        walk = walkable_cells(regions)
-        validate(regions, walk)
-        walls = blocked_rects(walk)
-        if len(walls) < 3:
-            raise BuildError(f"poucas paredes extraídas: {len(walls)}")
-        for x, y, w, h in walls:
-            if w < 1 or h < 1:
-                raise BuildError(f"parede degenerada: {(x, y, w, h)}")
-
-        map_doc = build_lab_json(walls)
+        map_doc, scene, walk, walls = _generate()
         _OUT_MAP.parent.mkdir(parents=True, exist_ok=True)
         _OUT_MAP.write_text(json.dumps(map_doc, indent=2), encoding="utf-8")
-        scene = compose_scene(regions, walk)
         pygame.image.save(scene, str(_OUT_SCENE))
-        save_menu_crop(scene)
-        draw_overlay(scene, walls)
+        pygame.image.save(menu_crop(scene), str(_OUT_MENU))
+        pygame.image.save(overlay_surface(scene, walls), str(_OUT_OVERLAY))
 
         print(f"lab.json -> {_OUT_MAP.relative_to(_REPO)}")
         print(f"scene    -> {_OUT_SCENE.relative_to(_REPO)}")
@@ -649,4 +707,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(check_freshness() if "--check" in sys.argv else main())
