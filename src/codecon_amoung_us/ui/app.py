@@ -47,6 +47,7 @@ from ..protocol import (
     TaskState,
     WorldSnapshot,
 )
+from .camera import Camera2D
 from .components import Button, ButtonState, FocusManager, PlayerCard, PlayerCardState
 from .fonts import FontBook
 from .layout import fit_viewport
@@ -60,6 +61,7 @@ from .render import (
     COLOR_TASK,
     COLOR_TEXT,
     COLOR_TEXT_DIM,
+    WORLD_HEIGHT,
     Renderer,
 )
 from .sprites import color_for
@@ -180,7 +182,9 @@ def _menu_theme() -> pygame_menu.Theme:
     como fundo (a superfície permanece em memória). Substitui o starfield
     procedural para manter a identidade do laboratório/Duckee.
     """
-    scene_path = default_assets_dir() / "maps" / "lab_scene.png"
+    scene_path = default_assets_dir() / "maps" / "lab_menu.png"
+    if not scene_path.is_file():
+        scene_path = default_assets_dir() / "maps" / "lab_scene.png"
     if scene_path.is_file():
         background = pygame.image.load(str(scene_path)).convert()
     else:
@@ -234,6 +238,13 @@ class App:
         self.game_map: GameMap = load_map(default_map_path())
         self.ui_settings = settings_from_env()
         self.renderer = Renderer(self.game_map, reduced_motion=self.ui_settings.reduced_motion)
+        # câmera do gameplay (cliente-only): segue o jogador local com
+        # suavização por dt; snap na primeira aparição (sem travelling)
+        self.camera = Camera2D(
+            viewport_size=(WINDOW_W, WORLD_HEIGHT), bounds=self.game_map.bounds()
+        )
+        self._camera_needs_snap = True
+        self._dt = 1.0 / 60.0
 
         # estado de UI
         self.screen_name: Screen = Screen.MAIN
@@ -560,6 +571,7 @@ class App:
     def _exit_to_main(self) -> None:
         """Encerra a conexão e retorna ao menu principal (padrão de saída)."""
         self._shutdown_connection()
+        self._camera_needs_snap = True
         self.screen_name = Screen.MAIN
         self._current_menu = self.menu_main
 
@@ -585,6 +597,7 @@ class App:
         elif isinstance(message, StartGame):
             self.screen_name = Screen.GAME
             self.lobby_players = []
+            self._camera_needs_snap = True
             self._nicknames.update({p.player_id: p.nickname for p in message.players})
         elif isinstance(message, RoleAssigned):
             self.role = message.role
@@ -674,7 +687,7 @@ class App:
             self._update_transitions()
             self._render(self._translate_events(events))
             self._present()
-            self.clock.tick(60)
+            self._dt = self.clock.tick(60) / 1000.0
         self._shutdown_connection()
         pygame.quit()
 
@@ -892,17 +905,25 @@ class App:
         me: SnapshotPlayer | None = None
         if snapshot is not None and self.my_id is not None:
             me = next((p for p in snapshot.players if p.player_id == self.my_id), None)
+        # câmera: snap na primeira aparição do jogador local; depois segue
+        # com suavização por dt (também quando morto — posição no snapshot)
+        if me is not None:
+            if self._camera_needs_snap:
+                self.camera.snap_to(me.x, me.y)
+                self._camera_needs_snap = False
+            else:
+                self.camera.update((me.x, me.y), self._dt)
         markers = derive_task_markers(
             game_map=self.game_map,
             my_task_ids=self.my_task_ids,
             tasks_state=self.tasks_state,
             me=me,
         )
-        self.renderer.draw_map(self.screen, markers)
+        self.renderer.draw_map(self.screen, self.camera, markers)
         if snapshot is not None and self.my_id is not None:
-            self.renderer.draw_bodies(self.screen, snapshot.bodies)
+            self.renderer.draw_bodies(self.screen, self.camera, snapshot.bodies)
             self.renderer.draw_players(
-                self.screen, snapshot.players, self.my_id, nicknames=self._nicknames
+                self.screen, self.camera, snapshot.players, self.my_id, nicknames=self._nicknames
             )
         hud = derive_game_hud(
             role=self.role,
@@ -998,7 +1019,7 @@ class App:
             tasks_state=self.tasks_state,
             me=me,
         )
-        self.renderer.draw_map(self.screen, markers)
+        self.renderer.draw_map(self.screen, self.camera, markers)
         overlay = pygame.Surface((WINDOW_W, WINDOW_H), pygame.SRCALPHA)
         overlay.fill((8, 10, 16, 205))
         self.screen.blit(overlay, (0, 0))

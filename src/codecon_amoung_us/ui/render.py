@@ -1,9 +1,13 @@
 """Renderização do mundo do jogo e helpers de UI (pygame).
 
-Desenha a cena do lab (pré-renderizada), jogadores como sprites duckee
-animados (idle/walk/death), corpos com o frame de morte do dono, marcadores
-de tarefa e botão de emergência pulsantes, e um painel HUD inferior com
-papel, progresso de tarefas, vivos e dica de controles.
+Desenha a cena do lab (pré-renderizada, maior que o viewport), jogadores
+como sprites duckee animados (idle/walk/death), corpos com o frame de morte
+do dono, marcadores de tarefa e botão de emergência pulsantes, e um painel
+HUD inferior com papel, progresso de tarefas, vivos e dica de controles.
+
+Todos os elementos do mundo passam pela mesma transformação da ``Camera2D``
+(mundo -> tela) recebida como parâmetro; o HUD não faz parte do mundo e não
+recebe offset de câmera.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import pygame
 from ..config import default_assets_dir
 from ..map.model import GameMap
 from ..protocol import SnapshotBody, SnapshotPlayer
+from .camera import Camera2D
 from .components import ActionPrompt
 from .fonts import FontBook
 from .sprites import DuckeeSprites, color_for
@@ -38,8 +43,22 @@ COLOR_EMERGENCY = (255, 74, 74)
 COLOR_ME = (96, 210, 255)
 COLOR_BODY_X = (255, 70, 70)
 
-# Área do mundo (1280x704); o restante da janela é o painel HUD.
+# Viewport lógico de gameplay (1280x704); o restante da janela é o painel
+# HUD. O mundo do mapa é maior — a câmera recorta a região visível.
+WORLD_WIDTH = 1280
 WORLD_HEIGHT = 704
+
+# Margem de culling (px) além do retângulo da câmera: cobre sprites e
+# marcadores parcialmente visíveis na borda.
+_CULL_MARGIN = 64
+
+
+def _in_view(camera: Camera2D, x: float, y: float) -> bool:
+    """True se o ponto do mundo está dentro do retângulo da câmera (+ margem)."""
+    sx, sy = camera.world_to_screen(x, y)
+    return -_CULL_MARGIN <= sx <= WORLD_WIDTH + _CULL_MARGIN and (
+        -_CULL_MARGIN <= sy <= WORLD_HEIGHT + _CULL_MARGIN
+    )
 
 
 def _draw_text_with_outline(
@@ -77,38 +96,57 @@ class Renderer:
         self._last_flip: dict[int, bool] = {}
 
     def _load_background(self) -> pygame.Surface:
-        """Cena do lab em resolução de mundo (1280x704), com fallback plano."""
+        """Cena do lab em resolução de mundo (maior que o viewport).
+
+        Garante o tamanho exato do mundo para que o blit com ``area``
+        (recorte da câmera) seja sempre válido; o ajuste acontece uma única
+        vez no carregamento, nunca por frame.
+        """
+        world_w = self.game_map.width * self.game_map.tile_width
+        world_h = self.game_map.height * self.game_map.tile_height
         path = default_assets_dir() / "maps" / "lab_scene.png"
         if path.is_file():
-            return pygame.image.load(str(path))
-        background = pygame.Surface((self.game_map.width * self.game_map.tile_width, WORLD_HEIGHT))
+            background = pygame.image.load(str(path))
+            if background.get_size() != (world_w, world_h):
+                background = pygame.transform.smoothscale(background, (world_w, world_h))
+            return background
+        background = pygame.Surface((world_w, world_h))
         background.fill((30, 34, 44))
         return background
 
     # ------------------------------------------------------------------ mapa
 
     def draw_map(
-        self, surface: pygame.Surface, markers: list[TaskMarkerView] | None = None
+        self,
+        surface: pygame.Surface,
+        camera: Camera2D,
+        markers: list[TaskMarkerView] | None = None,
     ) -> None:
-        """Cena + marcadores de tarefa contextuais (estado por marcador)."""
-        surface.blit(self._background, (0, 0))
+        """Recorte da câmera da cena + marcadores de tarefa contextuais."""
+        ox, oy = camera.offset()
+        surface.blit(self._background, (0, 0), area=pygame.Rect(ox, oy, WORLD_WIDTH, WORLD_HEIGHT))
         ticks = pygame.time.get_ticks()
         # reduced motion: sem pulsação contínua (marcador estático)
         pulse = 0.0 if self.reduced_motion else (math.sin(ticks / 180.0) + 1.0) / 2.0
         for marker in markers or []:
-            self._draw_task_marker(surface, marker, pulse)
+            self._draw_task_marker(surface, camera, marker, pulse)
         if self.game_map.emergency_meeting is not None:
-            # botão de reunião: anel estático (sem pulsação contínua)
             ex, ey = self.game_map.emergency_meeting
-            pygame.draw.circle(surface, COLOR_EMERGENCY, (int(ex), int(ey)), 14)
-            pygame.draw.circle(surface, (255, 255, 255), (int(ex), int(ey)), 18, 2)
+            if _in_view(camera, ex, ey):
+                # botão de reunião: anel estático (sem pulsação contínua)
+                sx, sy = camera.world_to_screen(ex, ey)
+                pygame.draw.circle(surface, COLOR_EMERGENCY, (int(sx), int(sy)), 14)
+                pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), 18, 2)
 
     def _draw_task_marker(
-        self, surface: pygame.Surface, marker: TaskMarkerView, pulse: float
+        self, surface: pygame.Surface, camera: Camera2D, marker: TaskMarkerView, pulse: float
     ) -> None:
-        x, y = int(marker.x), int(marker.y)
         if marker.state is TaskMarkerState.UNASSIGNED:
             return  # discreta/invisível
+        if not _in_view(camera, marker.x, marker.y):
+            return  # fora do retângulo da câmera
+        sx, sy = camera.world_to_screen(marker.x, marker.y)
+        x, y = int(sx), int(sy)
         if marker.state is TaskMarkerState.DONE:
             pygame.draw.circle(surface, (62, 68, 84), (x, y), 8)
             pygame.draw.circle(surface, (90, 96, 116), (x, y), 8, 2)
@@ -135,6 +173,7 @@ class Renderer:
     def draw_players(
         self,
         surface: pygame.Surface,
+        camera: Camera2D,
         players: list[SnapshotPlayer],
         me_id: int,
         *,
@@ -158,11 +197,15 @@ class Renderer:
                 index = (ticks // (130 if moving else 420)) % count
             else:
                 anim, index = "death", 0
+            if not _in_view(camera, player.x, player.y):
+                self._last_pos[player.player_id] = (player.x, player.y)
+                continue  # fora do retângulo da câmera
+            sx, sy = camera.world_to_screen(player.x, player.y)
             sprite = self.sprites.frame(color, anim, index)
             if flip:
                 sprite = pygame.transform.flip(sprite, True, False)
             width, height = sprite.get_size()
-            surface.blit(sprite, (round(player.x - width / 2), round(player.y - height)))
+            surface.blit(sprite, (round(sx - width / 2), round(sy - height)))
             nickname = (
                 nicknames.get(player.player_id, f"P{player.player_id}")
                 if nicknames is not None
@@ -172,20 +215,25 @@ class Renderer:
                 surface,
                 self.font_small,
                 nickname,
-                (round(player.x), round(player.y - height - 14)),
+                (round(sx), round(sy - height - 14)),
                 COLOR_TEXT,
             )
             if player.player_id == me_id and player.alive:
-                pygame.draw.circle(surface, COLOR_ME, (round(player.x), round(player.y)), 22, 2)
+                pygame.draw.circle(surface, COLOR_ME, (round(sx), round(sy)), 22, 2)
             self._last_pos[player.player_id] = (player.x, player.y)
 
-    def draw_bodies(self, surface: pygame.Surface, bodies: list[SnapshotBody]) -> None:
+    def draw_bodies(
+        self, surface: pygame.Surface, camera: Camera2D, bodies: list[SnapshotBody]
+    ) -> None:
         for body in bodies:
+            if not _in_view(camera, body.x, body.y):
+                continue  # fora do retângulo da câmera
+            sx, sy = camera.world_to_screen(body.x, body.y)
             color = color_for(body.player_id)
             sprite = self.sprites.frame(color, "death", 0)
             width, height = sprite.get_size()
-            surface.blit(sprite, (round(body.x - width / 2), round(body.y - height)))
-            x, y = round(body.x), round(body.y)
+            surface.blit(sprite, (round(sx - width / 2), round(sy - height)))
+            x, y = round(sx), round(sy)
             pygame.draw.line(surface, COLOR_BODY_X, (x - 16, y - 16), (x + 16, y + 16), 3)
             pygame.draw.line(surface, COLOR_BODY_X, (x + 16, y - 16), (x - 16, y + 16), 3)
 
