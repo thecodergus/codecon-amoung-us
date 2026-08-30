@@ -10,7 +10,7 @@ dependencies = [
     "pytiled-parser>=2.2.9,<3",
     "pygame-menu==4.5.2",
     "cython>=3.3.0",
-    "websockets>=15,<18",
+    "websockets>=17.1,<18",
 ]
 
 [project.scripts]

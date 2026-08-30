@@ -79,7 +79,8 @@ class GameClient:
         """Conecta via WebSocket (transporte preferencial) e envia JoinRequest."""
         self._reset_transport()
         # legacy=True: ciclo de vida gerenciado pela própria classe (close()),
-        # sem context manager — é o modo suportado para esse uso no websockets 17.
+        # sem context manager — modo suportado para esse uso no websockets
+        # >=17.1 (o parâmetro não existe na 17.0 — ver pyproject, piso 17.1).
         self._ws = ws_connect(f"ws://{host}:{port}/", open_timeout=timeout, legacy=True)
         self.transport = "ws"
         self._recv_thread = threading.Thread(

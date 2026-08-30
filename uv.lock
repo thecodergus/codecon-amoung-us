@@ -86,7 +86,7 @@ requires-dist = [
     { name = "pygame", specifier = "==2.6.1" },
     { name = "pygame-menu", specifier = "==4.5.2" },
     { name = "pytiled-parser", specifier = ">=2.2.9,<3" },
-    { name = "websockets", specifier = ">=15,<18" },
+    { name = "websockets", specifier = ">=17.1,<18" },
 ]
 
 [package.metadata.requires-dev]
