@@ -51,6 +51,8 @@ from .camera import Camera2D
 from .components import Button, ButtonState, FocusManager, PlayerCard, PlayerCardState
 from .fonts import FontBook
 from .layout import fit_viewport
+from .puzzles import TASK_DISPLAY, Minigame, create_minigame
+from .puzzles.base import CONTENT_H, CONTENT_W
 from .render import (
     COLOR_ACCENT,
     COLOR_BG,
@@ -263,6 +265,8 @@ class App:
         self._voting_page = 0
         self._voting_cursor = 0
         self.game_over: GameOver | None = None
+        # minigame modal da tarefa em andamento (None = mundo livre)
+        self._puzzle: Minigame | None = None
         self.last_snapshot: WorldSnapshot | None = None
         self._nicknames: dict[int, str] = {}
         self._snapshot_lock = threading.Lock()
@@ -559,6 +563,7 @@ class App:
         self.vote_ui_state = VoteUiState.SELECTING
         self.selected_vote_target = None
         self.game_over = None
+        self._puzzle = None
         self.last_snapshot = None
         self.toasts = []
         self.kill_cooldown_until = None
@@ -605,6 +610,7 @@ class App:
             self.tasks_state = None
         elif isinstance(message, MeetingStarted):
             self.meeting = message
+            self._puzzle = None  # reunião interrompe o puzzle sem completar
             self.vote_ui_state = VoteUiState.SELECTING
             self.selected_vote_target = None
             self._voting_page = 0
@@ -936,11 +942,73 @@ class App:
             now=time.monotonic(),
         )
         self.renderer.draw_hud(self.screen, hud)
-        for event in events:
-            if event.type == pygame.KEYDOWN:
-                self._handle_game_key(event.key)
-        self._handle_game_movement()
+        # morte com o puzzle aberto: fecha sem completar (mundo não pausa)
+        if self._puzzle is not None and (me is None or not me.alive):
+            self._puzzle = None
+        if self._puzzle is not None:
+            self._render_puzzle(events)
+        else:
+            for event in events:
+                if event.type == pygame.KEYDOWN:
+                    self._handle_game_key(event.key)
+            self._handle_game_movement()
         self._draw_toasts(self.screen)
+
+    # ------------------------------------------------------------------ puzzle
+
+    def _open_puzzle(self, task_id: int) -> None:
+        """Abre o minigame modal da tarefa (tipo vem do mapa carregado)."""
+        task_type = next(
+            (t.task_type for t in self.game_map.task_points if t.task_id == task_id), None
+        )
+        if task_type is None:
+            return
+        self._puzzle = create_minigame(
+            task_type,
+            task_id,
+            fonts=self.fonts,
+            reduced_motion=self.renderer.reduced_motion,
+        )
+
+    def _render_puzzle(self, events: list[pygame.event.Event]) -> None:
+        """Desenha o puzzle modal sobre o mundo (que continua ativo)."""
+        puzzle = self._puzzle
+        if puzzle is None:
+            return
+        overlay = pygame.Surface((WINDOW_W, WINDOW_H), pygame.SRCALPHA)
+        overlay.fill((8, 10, 16, 205))
+        self.screen.blit(overlay, (0, 0))
+        panel = pygame.Rect(0, 0, CONTENT_W + 80, CONTENT_H + 150)
+        panel.center = (WINDOW_W // 2, WINDOW_H // 2)
+        pygame.draw.rect(self.screen, COLOR_PANEL, panel, border_radius=16)
+        pygame.draw.rect(self.screen, COLOR_PANEL_BORDER, panel, width=2, border_radius=16)
+        title_text, hint_text = TASK_DISPLAY.get(
+            puzzle.task_type, (puzzle.task_type.replace("_", " "), "")
+        )
+        title = self.font_big.render(title_text, True, COLOR_TEXT)
+        self.screen.blit(title, title.get_rect(center=(panel.centerx, panel.y + 34)))
+        hint = self.font.render(hint_text, True, COLOR_TEXT_DIM)
+        self.screen.blit(hint, hint.get_rect(center=(panel.centerx, panel.y + 66)))
+        play = pygame.Rect(0, 0, CONTENT_W, CONTENT_H)
+        play.centerx = panel.centerx
+        play.y = panel.y + 92
+        puzzle.play_area = play
+        for event in events:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                # abandonar: fecha sem completar (progresso do puzzle perdido)
+                self._puzzle = None
+                return
+            puzzle.handle_event(event)
+        puzzle.update(self._dt)
+        puzzle.draw(self.screen)
+        if puzzle.done:
+            task_id = puzzle.task_id
+            self._puzzle = None
+            if self.client is not None:
+                self.client.complete_task(task_id)
+            return
+        footer = self.fonts.caption.render("ESC para sair", True, COLOR_TEXT_DIM)
+        self.screen.blit(footer, footer.get_rect(center=(panel.centerx, panel.bottom - 18)))
 
     def _handle_game_movement(self) -> None:
         """Envia MovementInput ao servidor enquanto WASD estiver pressionado."""
@@ -982,7 +1050,9 @@ class App:
             if context is None:
                 return
             if context.kind is ActionKind.TASK and context.target_id is not None:
-                self.client.complete_task(context.target_id)
+                # tarefa exige resolver o minigame; a conclusão vai ao
+                # servidor só quando o puzzle termina (ver _render_puzzle)
+                self._open_puzzle(context.target_id)
             elif context.kind is ActionKind.EMERGENCY:
                 self.client.emergency()
             return

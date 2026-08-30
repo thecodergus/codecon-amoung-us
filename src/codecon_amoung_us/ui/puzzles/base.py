@@ -58,6 +58,8 @@ class Minigame(ABC):
     tarefa ao servidor.
     """
 
+    task_type: str  # preenchido pela factory após a construção
+
     def __init__(
         self,
         task_id: int,
@@ -113,4 +115,6 @@ def create_minigame(
     cls = _REGISTRY.get(task_type)
     if cls is None:
         raise ValueError(f"minigame não implementado para o tipo: {task_type!r}")
-    return cls(task_id, fonts=fonts, seed=seed, reduced_motion=reduced_motion)
+    instance = cls(task_id, fonts=fonts, seed=seed, reduced_motion=reduced_motion)
+    instance.task_type = task_type
+    return instance

@@ -373,7 +373,8 @@ def _setup_game_state(app: App, *, x: float, y: float, alive: bool = True) -> No
     )
 
 
-def test_e_key_completes_nearby_assigned_task(monkeypatch: pytest.MonkeyPatch, app: App) -> None:
+def _setup_puzzle(app: App) -> int:
+    """Estado de jogo com o jogador sobre uma tarefa atribuída; retorna o id."""
     from codecon_amoung_us.config import default_map_path
     from codecon_amoung_us.map.loader import load_map
     from codecon_amoung_us.protocol import TaskInfo, TaskState
@@ -385,12 +386,76 @@ def test_e_key_completes_nearby_assigned_task(monkeypatch: pytest.MonkeyPatch, a
     app.tasks_state = TaskState(
         tasks=[TaskInfo(task_id=point.task_id, task_type=point.task_type, done=False)]
     )
+    return point.task_id
+
+
+def test_e_key_opens_task_puzzle_without_completing(
+    monkeypatch: pytest.MonkeyPatch, app: App
+) -> None:
+    task_id = _setup_puzzle(app)
     completed: list[int] = []
     client = GameClient()
-    monkeypatch.setattr(client, "complete_task", lambda task_id: completed.append(task_id))
+    monkeypatch.setattr(client, "complete_task", lambda tid: completed.append(tid))
     app.client = client
     app._handle_game_key(pygame.K_e)
-    assert completed == [point.task_id]
+    # E abre o minigame; nada vai ao servidor antes de resolver o puzzle
+    assert app._puzzle is not None
+    assert app._puzzle.task_id == task_id
+    assert completed == []
+
+
+def test_puzzle_done_sends_complete_task(monkeypatch: pytest.MonkeyPatch, app: App) -> None:
+    task_id = _setup_puzzle(app)
+    completed: list[int] = []
+    client = GameClient()
+    monkeypatch.setattr(client, "complete_task", lambda tid: completed.append(tid))
+    app.client = client
+    app._handle_game_key(pygame.K_e)
+    assert app._puzzle is not None
+    app._puzzle._done = True  # puzzle resolvido (lógica coberta em test_puzzles)
+    app._render_puzzle([])
+    assert completed == [task_id]
+    assert app._puzzle is None
+
+
+def test_puzzle_escape_abandons_without_completing(
+    monkeypatch: pytest.MonkeyPatch, app: App
+) -> None:
+    _setup_puzzle(app)
+    completed: list[int] = []
+    client = GameClient()
+    monkeypatch.setattr(client, "complete_task", lambda tid: completed.append(tid))
+    app.client = client
+    app._handle_game_key(pygame.K_e)
+    assert app._puzzle is not None
+    event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+    app._render_puzzle([event])
+    assert app._puzzle is None
+    assert completed == []
+
+
+def test_meeting_started_closes_puzzle(app: App) -> None:
+    _setup_puzzle(app)
+    app.client = GameClient()  # _handle_game_key exige sessão ativa
+    app._handle_game_key(pygame.K_e)
+    assert app._puzzle is not None
+    app._handle_message(_meeting())
+    assert app._puzzle is None
+
+
+def test_death_closes_puzzle_without_completing(monkeypatch: pytest.MonkeyPatch, app: App) -> None:
+    task_id = _setup_puzzle(app)
+    completed: list[int] = []
+    client = GameClient()
+    monkeypatch.setattr(client, "complete_task", lambda tid: completed.append(tid))
+    app.client = client
+    app._handle_game_key(pygame.K_e)
+    assert app._puzzle is not None
+    # morreu com o puzzle aberto: o próximo frame do jogo fecha sem completar
+    _setup_game_state(app, x=0.0, y=0.0, alive=False)
+    app._render_game([])
+    assert app._puzzle is None
+    assert completed == []
 
 
 def test_e_key_sends_nothing_outside_radius(monkeypatch: pytest.MonkeyPatch, app: App) -> None:
