@@ -134,7 +134,7 @@ def test_start_game_assigns_one_impostor(
         if assigned.role is Role.IMPOSTOR:
             assert assigned.task_ids == []
         else:
-            assert len(assigned.task_ids) == 2
+            assert len(assigned.task_ids) == 6
     roles = [c.role for c in four_clients]
     assert roles.count(Role.IMPOSTOR) == 1
     assert roles.count(Role.CREW) == 3
@@ -149,7 +149,7 @@ def test_non_host_cannot_start(server: GameServer, four_clients: list[GameClient
     assert server._state.phase is Phase.LOBBY
 
 
-@pytest.mark.timeout(40)
+@pytest.mark.timeout(120)
 def test_solo_host_starts_and_wins_by_tasks(server: GameServer) -> None:
     # Jogador único: o host inicia a partida como tripulante (sem impostor) e
     # vence ao completar as tarefas — não há vitória instantânea no 1º tick.
@@ -172,7 +172,7 @@ def test_solo_host_starts_and_wins_by_tasks(server: GameServer) -> None:
         game_map = load_map(default_map_path())
         for task_id in assigned_tasks:
             point = next(tp for tp in game_map.task_points if tp.task_id == task_id)
-            assert _move_to_point(client, point.x, point.y, timeout=20.0)
+            assert _move_to_point(client, point.x, point.y, timeout=30.0)
             client.complete_task(task_id)
         over = client.wait_for(GameOver, timeout=10.0)
         assert over.winner is Team.CREW

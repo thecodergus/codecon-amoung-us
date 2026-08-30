@@ -15,6 +15,8 @@ def assign_tasks(state: GameState, rng: random.Random | None = None) -> dict[int
 
     Impostores recebem lista vazia (tarefas "falsas" não são necessárias
     no MVP). Usa o RNG fornecido (determinístico em testes) ou um novo.
+    Tipos podem se repetir entre as tarefas de um mesmo jogador (o mapa
+    tem várias instâncias de cada tipo); os ids são sempre distintos.
     """
     rng = rng if rng is not None else random.Random()
     crew = [p for p in state.players.values() if p.role is Role.CREW]
@@ -22,7 +24,7 @@ def assign_tasks(state: GameState, rng: random.Random | None = None) -> dict[int
     assignments: dict[int, list[int]] = {p.player_id: [] for p in state.players.values()}
     if not task_pool:
         return assignments
-    tasks_per_crew = min(2, len(task_pool))
+    tasks_per_crew = min(6, len(task_pool))
     for player in crew:
         chosen = rng.sample(task_pool, tasks_per_crew)
         assignments[player.player_id] = sorted(chosen)
