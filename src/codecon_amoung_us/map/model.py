@@ -6,9 +6,9 @@ física, servidor e renderização.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-__all__ = ["Rect", "SpawnPoint", "TaskPoint", "GameMap"]
+__all__ = ["Rect", "Room", "SpawnPoint", "TaskPoint", "GameMap"]
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,14 @@ class TaskPoint:
 
 
 @dataclass(frozen=True)
+class Room:
+    """Sala/área nomeada do mapa (região espacial aproximada, validação/UI)."""
+
+    name: str
+    rect: Rect
+
+
+@dataclass(frozen=True)
 class GameMap:
     """Mapa convertido em estruturas internas do jogo."""
 
@@ -80,6 +88,7 @@ class GameMap:
     task_points: list[TaskPoint]
     emergency_meeting: tuple[float, float] | None
     emergency_meeting_radius: float
+    rooms: list[Room] = field(default_factory=list)
 
     def bounds(self) -> tuple[float, float, float, float]:
         """Limites do mapa em pixels: (esquerda, topo, direita, base)."""

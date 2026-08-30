@@ -14,7 +14,7 @@ from typing import cast
 import pytiled_parser
 from pytiled_parser import common_types, layer, tiled_object
 
-from .model import GameMap, Rect, SpawnPoint, TaskPoint
+from .model import GameMap, Rect, Room, SpawnPoint, TaskPoint
 
 __all__ = ["MapError", "load_map"]
 
@@ -144,6 +144,16 @@ def _load_decorative(
     return items
 
 
+def _load_rooms(lyr: layer.ObjectLayer) -> list[Room]:
+    rooms: list[Room] = []
+    for index, obj in enumerate(lyr.tiled_objects):
+        if not isinstance(obj, tiled_object.Rectangle):
+            continue
+        name = obj.name if obj.name else f"room{index}"
+        rooms.append(Room(name=name, rect=_rect_of(obj)))
+    return rooms
+
+
 def load_map(path: str | Path) -> GameMap:
     """Carrega o asset Tiled e converte para ``GameMap`` (estruturas internas)."""
     map_path = Path(path)
@@ -175,6 +185,9 @@ def load_map(path: str | Path) -> GameMap:
     decorative_lyr = _object_layer(tiled, "decorative")
     decorative = _load_decorative(decorative_lyr) if decorative_lyr is not None else []
 
+    rooms_lyr = _object_layer(tiled, "rooms")
+    rooms = _load_rooms(rooms_lyr) if rooms_lyr is not None else []
+
     return GameMap(
         name=map_path.stem,
         width=int(tiled.map_size.width),
@@ -188,4 +201,5 @@ def load_map(path: str | Path) -> GameMap:
         task_points=tasks,
         emergency_meeting=emergency,
         emergency_meeting_radius=emergency_radius,
+        rooms=rooms,
     )
