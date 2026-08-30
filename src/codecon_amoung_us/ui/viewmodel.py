@@ -158,6 +158,7 @@ class TaskMarkerView:
     x: float
     y: float
     state: TaskMarkerState
+    task_type: str
     pulse: bool = False
 
 
@@ -180,27 +181,44 @@ def derive_task_markers(
     for point in game_map.task_points:
         if point.task_id not in my_task_ids:
             markers.append(
-                TaskMarkerView(point.task_id, point.x, point.y, TaskMarkerState.UNASSIGNED)
+                TaskMarkerView(
+                    point.task_id, point.x, point.y, TaskMarkerState.UNASSIGNED, point.task_type
+                )
             )
             continue
         if point.task_id in done_ids:
-            markers.append(TaskMarkerView(point.task_id, point.x, point.y, TaskMarkerState.DONE))
+            markers.append(
+                TaskMarkerView(
+                    point.task_id, point.x, point.y, TaskMarkerState.DONE, point.task_type
+                )
+            )
             continue
         if me is not None and me.alive:
             distance = math.hypot(point.x - me.x, point.y - me.y)
             if distance <= point.interaction_radius:
                 markers.append(
                     TaskMarkerView(
-                        point.task_id, point.x, point.y, TaskMarkerState.INTERACTABLE, pulse=True
+                        point.task_id,
+                        point.x,
+                        point.y,
+                        TaskMarkerState.INTERACTABLE,
+                        point.task_type,
+                        pulse=True,
                     )
                 )
                 continue
             if distance <= point.interaction_radius * 2.5:
                 markers.append(
-                    TaskMarkerView(point.task_id, point.x, point.y, TaskMarkerState.NEAR)
+                    TaskMarkerView(
+                        point.task_id, point.x, point.y, TaskMarkerState.NEAR, point.task_type
+                    )
                 )
                 continue
-        markers.append(TaskMarkerView(point.task_id, point.x, point.y, TaskMarkerState.ASSIGNED))
+        markers.append(
+            TaskMarkerView(
+                point.task_id, point.x, point.y, TaskMarkerState.ASSIGNED, point.task_type
+            )
+        )
     return markers
 
 

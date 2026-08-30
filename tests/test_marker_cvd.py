@@ -75,7 +75,7 @@ def _render_marker_pixels(app: App, state: TaskMarkerState) -> list[tuple[int, i
     camera = Camera2D(viewport_size=(float(_CROP), float(_CROP)), bounds=app.game_map.bounds())
     half = _CROP / 2.0
     camera.snap_to(half, half)
-    marker = TaskMarkerView(task_id=1, x=half, y=half, state=state)
+    marker = TaskMarkerView(task_id=1, x=half, y=half, state=state, task_type="wires")
     app.renderer._draw_task_marker(surface, camera, marker, 0.0)
     pixels: list[tuple[int, int, int]] = []
     for y in range(_CROP):

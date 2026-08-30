@@ -265,7 +265,7 @@ def test_renderer_reduced_motion_disables_pulse() -> None:
     assert renderer.reduced_motion is True
     camera = Camera2D(viewport_size=(1280.0, 704.0), bounds=game_map.bounds())
     surface = pygame.Surface((1280, 768))
-    markers = [TaskMarkerView(1, 300.0, 300.0, TaskMarkerState.INTERACTABLE, pulse=True)]
+    markers = [TaskMarkerView(1, 300.0, 300.0, TaskMarkerState.INTERACTABLE, "wires", pulse=True)]
     renderer.draw_map(surface, camera, markers)  # desenha sem pulsação contínua
 
 
