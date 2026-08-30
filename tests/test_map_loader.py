@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 
 import pytest
 
@@ -39,7 +40,9 @@ def test_spawn_points_with_ids(game_map: GameMap) -> None:
 
 def test_task_points_with_properties(game_map: GameMap) -> None:
     assert len(game_map.task_points) == 28
-    by_type = {t.task_type for t in game_map.task_points}
+    # 4 instâncias de cada tipo do catálogo (round-robin do builder)
+    counts = Counter(t.task_type for t in game_map.task_points)
+    assert counts == Counter({task_type: 4 for task_type in TASK_TYPES})
 
     # interaction_radius veio da propriedade customizada do Tiled
     assert all(t.interaction_radius == 56.0 for t in game_map.task_points)
