@@ -64,6 +64,49 @@ uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 \
     --max-players 10 --tick-rate 20
 ```
 
+## Jogar em rede (LAN)
+
+**Descoberta automática.** O host anuncia a partida via UDP broadcast
+(porta 5557) enquanto está no lobby; quem está na mesma rede abre
+Entrar em partida → Buscar partidas na rede e entra com um clique, sem
+saber IP nem porta. A lista mostra apelido do host, IP e vagas. O campo
+manual continua disponível como fallback (ex.: broadcast bloqueado pelo
+roteador). O lobby do host exibe o IP local e as portas para compartilhar
+manualmente se preciso.
+
+**Transporte WebSocket (padrão ouro) e TCP (fallback).** O servidor escuta
+TCP cru e WebSocket simultaneamente; o cliente tenta WebSocket primeiro e
+cai para TCP transparentemente. O protocolo do jogo é idêntico nos dois —
+o WS só embrulha os frames. O host embutido sobe o WS na porta adjacente
+(TCP 5555 → WS 5556); o standalone usa `--ws-port`:
+
+```bash
+uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 --ws-port 5556
+```
+
+**Por que WebSocket na porta 80/443?** Firewalls corporativos e proxies
+que bloqueiam TCP cru em portas arbitrárias quase sempre liberam tráfego
+web (80/443): o handshake WS é um HTTP GET + Upgrade, indistinguível de
+tráfego web para firewalls por porta/protocolo. Para usar a 80 no Linux
+(porta privilegiada), uma única vez:
+
+```bash
+sudo setcap 'cap_net_bind_service=+ep' "$(readlink -f .venv/bin/python)"
+uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 --ws-port 80
+```
+
+Caveats honestos:
+
+- O firewall do **próprio host** ainda pode exigir autorização (um clique
+  na primeira escuta) — porta 80 não dispensa isso; o ganho é contra
+  firewalls de **rede** entre segmentos e contra proxies.
+- Proxies corporativos com inspeção de conteúdo podem remover o Upgrade de
+  `ws://` (sem TLS). `wss://` exigiria certificado confiável (domínio +
+  Let's Encrypt) e está fora do escopo LAN.
+- Wi-Fi de evento/empresa com **isolamento de clientes** bloqueia TODO
+  tráfego entre máquinas: nem a descoberta nem a conexão por IP funcionam.
+  Nesse cenário, só um relay público resolveria (fora de escopo).
+
 ## Controles (tela de jogo)
 
 | Ação | Tecla |
@@ -238,5 +281,7 @@ uv run mypy
   câmera 2D que segue o jogador local (viewport lógico 1280x704).
 - Sem reconexão: desconectar durante a partida remove o jogador (com
   promoção de host no lobby).
+- Rede: escopo é a mesma LAN. Jogo pela internet (host atrás de NAT/CGNAT
+  sem port-forward) não é suportado — não há relay nem hole-punching.
 - Sem persistência: sem histórico, ranking ou contas.
 - Colisão ponto-único (sem raio do jogador): física mínima suficiente para o MVP.
