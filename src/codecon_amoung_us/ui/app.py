@@ -1075,7 +1075,7 @@ class App:
             status = self.font.render("ENVIANDO VOTO…", True, COLOR_TEXT)
             self.screen.blit(status, status.get_rect(center=layout.status_center))
         elif self.vote_ui_state is VoteUiState.SUBMITTED:
-            status = self.font.render("✓ VOTO REGISTRADO", True, COLOR_TASK)
+            status = self.font.render("VOTO REGISTRADO", True, COLOR_TASK)
             self.screen.blit(status, status.get_rect(center=layout.status_center))
         for event in events:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:

@@ -335,9 +335,11 @@ class ActionPrompt:
         pygame.draw.rect(
             surface, TOKENS.surface_panel_border, self.rect, width=1, border_radius=RADIUS
         )
+        # o chip acompanha a largura do texto da tecla (ex.: SPACE > 34 px)
+        keycap_width = max(34, font.size(self.keycap_label)[0] + 16)
         key = Keycap(
             self.keycap_label,
-            pygame.Rect(self.rect.x + SPACING, self.rect.y + 4, 34, self.rect.height - 8),
+            pygame.Rect(self.rect.x + SPACING, self.rect.y + 4, keycap_width, self.rect.height - 8),
             font,
         )
         key.draw(surface)
