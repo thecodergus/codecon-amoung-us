@@ -155,18 +155,28 @@ class Renderer:
                 surface, (90, 96, 116), False, [(x - 4, y), (x - 1, y + 4), (x + 5, y - 4)], 2
             )
             return
+        # Estados ativos: losango (forma própria — nunca só cor). NEAR ganha
+        # um anel externo; INTERACTABLE é preenchido, pulsa e mostra "!".
         if marker.state is TaskMarkerState.INTERACTABLE:
-            radius = 8 + int(4 * pulse if marker.pulse else 0)
-            color = (255, 224, 132)
-            pygame.draw.circle(surface, color, (x, y), radius)
-            pygame.draw.circle(surface, (30, 26, 8), (x, y), radius, 2)
+            radius = 10 + int(4 * pulse if marker.pulse else 0)
+            points = [(x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)]
+            pygame.draw.polygon(surface, (255, 224, 132), points)
+            pygame.draw.polygon(surface, (30, 26, 8), points, 2)
+            # glifo "!" (signifier de ação disponível, desenhado sem fonte)
+            pygame.draw.rect(surface, (30, 26, 8), (x - 1, y - radius // 2, 3, radius // 2 + 1))
+            pygame.draw.circle(surface, (30, 26, 8), (x, y + radius // 2 - 1), 2)
             return
         if marker.state is TaskMarkerState.NEAR:
-            pygame.draw.circle(surface, (196, 168, 84), (x, y), 7)
-            pygame.draw.circle(surface, (30, 26, 8), (x, y), 7, 2)
+            radius = 8
+            points = [(x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)]
+            pygame.draw.polygon(surface, (24, 28, 40), points)
+            pygame.draw.polygon(surface, (255, 224, 132), points, 2)
+            pygame.draw.circle(surface, (255, 224, 132), (x, y), radius + 5, 2)
             return
-        pygame.draw.circle(surface, COLOR_TASK, (x, y), 6)
-        pygame.draw.circle(surface, (30, 26, 8), (x, y), 6, 2)
+        radius = 7
+        points = [(x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)]
+        pygame.draw.polygon(surface, (24, 28, 40), points)
+        pygame.draw.polygon(surface, COLOR_TASK, points, 2)
 
     # ------------------------------------------------------------- jogadores
 
