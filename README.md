@@ -43,12 +43,20 @@ uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 \
 | Ação | Tecla |
 | --- | --- |
 | Mover | WASD |
-| Interagir (tarefa atribuída/incompleta próxima ou botão de reunião) | E |
+| Interagir (abrir minigame da tarefa próxima ou botão de reunião) | E |
+| Jogar minigame da tarefa | Mouse (arrastar/clicar) ou Espaço, conforme o puzzle |
+| Abandonar minigame (sem completar a tarefa) | ESC (com o puzzle aberto) |
 | Reportar corpo | R (perto de um corpo) |
 | Matar (impostor) | Espaço (alvo próximo e cooldown respeitado; recusas viram toast) |
 | Votar | Mouse (card inteiro selecionável; Skip para pular) |
 | Foco de teclado (menus/lobby/votação) | Tab / Shift+Tab / Enter |
 | Sair do jogo | ESC |
+
+Tarefas são minigames obrigatórios (7 tipos: ligar fios, reparar circuito,
+passar cartão, calibrar sensores, limpar filtro, reativar reator, destruir
+asteroides): a conclusão só vai ao servidor depois de resolver o puzzle.
+O mundo não pausa com o puzzle aberto — morrer ou iniciar reunião fecha o
+minigame sem completar a tarefa.
 
 Recusas de ação (`ActionDenied` tipado) sempre geram feedback: toast no
 gameplay/votação ou aviso no lobby. O cooldown de eliminação aparece no HUD
@@ -97,10 +105,11 @@ src/codecon_amoung_us/
                      (GameClient: usado pela UI; helpers p/ testes e smoke)
                      + dispatch.py (sigilo)
   ui/                app.py (App, menus, jogo, votação) + render.py +
-                     sprites.py (duckee)
-assets/maps/lab.json      mapa Tiled (40x22, 64px, 2560x1408): paredes, spawns,
-                          tarefas, botão de emergência, salas — gerado pelo
-                          build_lab_map.py
+                     sprites.py (duckee) + puzzles/ (7 minigames de tarefa:
+                     lógica pura testável + wrapper pygame)
+assets/maps/lab.json      mapa Tiled (70x38, 64px, 4480x2432): paredes, spawns,
+                          14 tarefas (7 tipos), botão de emergência, 12 salas —
+                          gerado pelo build_lab_map.py
 assets/maps/lab_scene.png cena do lab em resolução de mundo (fundo do jogo)
 assets/maps/skeld.json    mapa Tiled legado (40x30, 32px) — suportado pelo
                           loader, não é mais o padrão

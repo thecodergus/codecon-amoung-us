@@ -1,6 +1,10 @@
 # Plano: mundo triplicado + 7 minigames obrigatórios
 
-Status: em execução (build agent, 2026-08-30).
+Status: **executado** (build agent, 2026-08-30). Desvios: nenhum material —
+o mundo ficou em 70×38 (4480×2432, ~3× a área) com 1026 células caminháveis
+(~2,8× o baseline de 370; gate ≥1000). Fases A–F entregues em commits
+próprios (catálogo → mapa → framework+puzzles → integração → marcadores →
+docs/validação).
 
 ## Objetivo
 

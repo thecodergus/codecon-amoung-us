@@ -86,8 +86,9 @@ class Minigame(ABC):
     @abstractmethod
     def handle_event(self, event: pygame.event.Event) -> None: ...
 
+    @abstractmethod
     def update(self, dt: float) -> None:
-        """Avança a simulação (puzzles estáticos ignoram)."""
+        """Avança a simulação (puzzles estáticos implementam como no-op)."""
 
     @abstractmethod
     def draw(self, surface: pygame.Surface) -> None: ...

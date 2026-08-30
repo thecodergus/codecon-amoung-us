@@ -444,7 +444,7 @@ def test_meeting_started_closes_puzzle(app: App) -> None:
 
 
 def test_death_closes_puzzle_without_completing(monkeypatch: pytest.MonkeyPatch, app: App) -> None:
-    task_id = _setup_puzzle(app)
+    _setup_puzzle(app)
     completed: list[int] = []
     client = GameClient()
     monkeypatch.setattr(client, "complete_task", lambda tid: completed.append(tid))

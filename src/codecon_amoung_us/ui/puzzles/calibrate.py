@@ -85,9 +85,12 @@ class CalibrateMinigame(Minigame):
         self.logic = CalibrateLogic(difficulty_for("calibrate").speed)
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self.logic.press()
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+        if (
+            event.type == pygame.MOUSEBUTTONDOWN
+            and event.button == 1
+            or event.type == pygame.KEYDOWN
+            and event.key == pygame.K_SPACE
+        ):
             self.logic.press()
         if self.logic.done:
             self._done = True

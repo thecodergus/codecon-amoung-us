@@ -14,7 +14,8 @@ task_points, emergency_meeting, rooms). Também gera
 O script é determinístico e reexecutável (idempotente) e falha (exit != 0)
 se qualquer gate de validação não passar: mundo maior que o viewport nos
 dois eixos e com pelo menos 6x a área do mapa original, quantidade mínima
-de salas e de células caminháveis, componente caminhável único (BFS), alcançabilidade de todos os pontos
+de salas e de células caminháveis, componente caminhável único (BFS),
+alcançabilidade de todos os pontos
 de gameplay (spawns, tarefas, emergência) por caminho, distâncias mínimas
 entre pontos, distribuição de tarefas por múltiplas salas, ciclo no grafo
 sala/corredor e paredes válidas. A colisão deriva apenas do JSON — a imagem

@@ -118,6 +118,9 @@ class CleanFilterMinigame(Minigame):
         if self.logic.done:
             self._done = True
 
+    def update(self, dt: float) -> None:
+        """Puzzle estático: nada a simular entre eventos."""
+
     def draw(self, surface: pygame.Surface) -> None:
         ox, oy = self.play_area.x, self.play_area.y
         fx, fy, fw, fh = self.logic._filter_rect()
