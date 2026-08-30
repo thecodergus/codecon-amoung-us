@@ -18,6 +18,7 @@ from .theme import BORDER, RADIUS, SPACING, TOKENS
 
 __all__ = [
     "ButtonState",
+    "InteractionState",
     "Button",
     "FocusManager",
     "Keycap",
@@ -32,7 +33,7 @@ MIN_TARGET_SIZE = 40
 
 
 class ButtonState(StrEnum):
-    """Estados visuais de um botão."""
+    """Estados semânticos de um botão (atribuídos pela tela)."""
 
     DEFAULT = "default"
     HOVER = "hover"
@@ -43,8 +44,16 @@ class ButtonState(StrEnum):
     COOLDOWN = "cooldown"
 
 
+class InteractionState(StrEnum):
+    """Estado transitório de ponteiro do botão (mantido pelo próprio botão)."""
+
+    IDLE = "idle"
+    HOVER = "hover"
+    PRESSED = "pressed"
+
+
 def _surface_color(state: ButtonState) -> tuple[int, int, int]:
-    if state is ButtonState.DISABLED:
+    if state in (ButtonState.DISABLED, ButtonState.COOLDOWN):
         return (30, 34, 50)
     if state is ButtonState.PRESSED:
         return TOKENS.surface_interactive_pressed
@@ -54,13 +63,21 @@ def _surface_color(state: ButtonState) -> tuple[int, int, int]:
 
 
 def _text_color(state: ButtonState) -> tuple[int, int, int]:
-    if state is ButtonState.DISABLED:
+    if state in (ButtonState.DISABLED, ButtonState.COOLDOWN):
         return TOKENS.text_disabled
     return TOKENS.text_primary
 
 
 class Button:
-    """Botão de estado explícito (sem regras de jogo; hover por estado)."""
+    """Botão com estado semântico (da tela) + interação de ponteiro (própria).
+
+    O estado semântico (``state``) é atribuído pela tela a cada frame e tem
+    precedência visual; a interação (``interaction``) é mantida pelo botão a
+    partir de eventos e só aparece quando o estado semântico é DEFAULT.
+    ``focused`` é atribuído pelo ``FocusManager`` e desenha o anel de foco
+    como overlay, distinguível do hover. Instâncias devem ser persistentes
+    entre frames: a tela atribui ``state``, não reconstrói o botão.
+    """
 
     def __init__(
         self,
@@ -78,38 +95,77 @@ class Button:
         self.state = state
         self.icon = icon
         self.font = font if font is not None else FontBook().control
+        self.interaction = InteractionState.IDLE
+        self.focused = False
 
     @property
     def enabled(self) -> bool:
         return self.state is not ButtonState.DISABLED
 
+    @property
+    def activatable(self) -> bool:
+        """Pode ser ativado por ponteiro/teclado (cooldown não é clicável)."""
+        return self.state not in (ButtonState.DISABLED, ButtonState.COOLDOWN)
+
     def activate(self) -> None:
-        """Executa a ação se o botão não estiver desabilitado."""
-        if self.enabled and self.on_click is not None:
+        """Executa a ação se o botão estiver ativável."""
+        if self.activatable and self.on_click is not None:
             self.on_click()
 
+    def visual_state(self) -> ButtonState:
+        """Estado visual efetivo: o semântico tem precedência sobre a interação."""
+        if self.state is not ButtonState.DEFAULT:
+            return self.state
+        if self.interaction is InteractionState.PRESSED:
+            return ButtonState.PRESSED
+        if self.interaction is InteractionState.HOVER:
+            return ButtonState.HOVER
+        return ButtonState.DEFAULT
+
     def draw(self, surface: pygame.Surface) -> None:
-        color = _surface_color(self.state)
+        visual = self.visual_state()
+        color = _surface_color(visual)
         pygame.draw.rect(surface, color, self.rect, border_radius=RADIUS)
         pygame.draw.rect(
             surface, TOKENS.surface_panel_border, self.rect, width=BORDER, border_radius=RADIUS
         )
-        if self.state is ButtonState.FOCUSED:
+        if self.state is ButtonState.FOCUSED or self.focused:
             # anel de foco distinto do hover
             ring = self.rect.inflate(6, 6)
             pygame.draw.rect(surface, TOKENS.focus_ring, ring, width=2, border_radius=RADIUS + 2)
         label = self.icon + " " + self.label if self.icon else self.label
-        text = self.font.render(label, True, _text_color(self.state))
+        text = self.font.render(label, True, _text_color(visual))
         surface.blit(text, text.get_rect(center=self.rect.center))
 
     def handle_event(self, event: pygame.event.Event) -> bool:
-        """Processa clique; True se o evento foi consumido."""
-        if (
-            event.type == pygame.MOUSEBUTTONDOWN
-            and event.button == 1
-            and self.rect.collidepoint(event.pos)
-        ):
-            self.activate()
+        """Processa ponteiro (hover/pressed/clique); True se o evento foi consumido.
+
+        Clique completo: MOUSEBUTTONDOWN dentro arma PRESSED; MOUSEBUTTONUP
+        dentro ativa e volta para HOVER; MOUSEBUTTONUP fora cancela sem
+        ativar. Botões não ativáveis (disabled/cooldown) ignoram o ponteiro.
+        """
+        if event.type == pygame.MOUSEMOTION:
+            if not self.activatable:
+                self.interaction = InteractionState.IDLE
+            elif self.interaction is not InteractionState.PRESSED:
+                self.interaction = (
+                    InteractionState.HOVER
+                    if self.rect.collidepoint(event.pos)
+                    else InteractionState.IDLE
+                )
+            return False
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.activatable and self.rect.collidepoint(event.pos):
+                self.interaction = InteractionState.PRESSED
+                return True
+            return False
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.interaction is not InteractionState.PRESSED:
+                return False
+            self.interaction = InteractionState.IDLE
+            if self.activatable and self.rect.collidepoint(event.pos):
+                self.interaction = InteractionState.HOVER
+                self.activate()
             return True
         return False
 

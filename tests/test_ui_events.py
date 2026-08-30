@@ -83,12 +83,14 @@ def test_button_click_fires_callback() -> None:
     pygame.init()
     calls: list[int] = []
     button = Button((10, 10, 100, 40), "ok", lambda: calls.append(1))
-    event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(50, 30))
-    button.handle_event(event)
+    # clique completo: MOUSEBUTTONDOWN arma; MOUSEBUTTONUP dentro ativa
+    button.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(50, 30)))
+    assert calls == []
+    button.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(50, 30)))
     assert calls == [1]
     # clique fora do retângulo não dispara
-    outside = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(500, 500))
-    button.handle_event(outside)
+    button.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(500, 500)))
+    button.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(500, 500)))
     assert calls == [1]
 
 

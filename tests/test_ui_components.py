@@ -20,12 +20,33 @@ from codecon_amoung_us.ui.components import (
     Button,
     ButtonState,
     FocusManager,
+    InteractionState,
     PlayerCard,
     PlayerCardState,
     ProgressBar,
 )
 
 pytestmark = pytest.mark.ui
+
+_INSIDE = (50, 30)
+_OUTSIDE = (500, 500)
+
+
+def _down(pos: tuple[int, int]) -> pygame.event.Event:
+    return pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=pos)
+
+
+def _up(pos: tuple[int, int]) -> pygame.event.Event:
+    return pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=pos)
+
+
+def _motion(pos: tuple[int, int]) -> pygame.event.Event:
+    return pygame.event.Event(pygame.MOUSEMOTION, pos=pos)
+
+
+def _interaction_of(button: Button) -> InteractionState:
+    """Lê a interação sem o narrowing do mypy sobre o atributo."""
+    return button.interaction
 
 
 def test_button_draws_in_every_state() -> None:
@@ -40,24 +61,118 @@ def test_button_click_fires_callback() -> None:
     pygame.init()
     calls: list[int] = []
     button = Button((10, 10, 100, 40), "ok", lambda: calls.append(1))
-    event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(50, 30))
-    button.handle_event(event)
+    # clique completo: MOUSEBUTTONDOWN arma; MOUSEBUTTONUP dentro ativa
+    button.handle_event(_down(_INSIDE))
+    assert calls == []
+    button.handle_event(_up(_INSIDE))
     assert calls == [1]
     # clique fora do retângulo não dispara
-    outside = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(500, 500))
-    button.handle_event(outside)
+    button.handle_event(_down(_OUTSIDE))
+    button.handle_event(_up(_OUTSIDE))
     assert calls == [1]
+
+
+def test_button_enters_hover() -> None:
+    pygame.init()
+    button = Button((10, 10, 100, 40), "ok")
+    button.handle_event(_motion(_INSIDE))
+    assert button.interaction is InteractionState.HOVER
+    assert button.visual_state() is ButtonState.HOVER
+
+
+def test_button_leaves_hover() -> None:
+    pygame.init()
+    button = Button((10, 10, 100, 40), "ok")
+    button.handle_event(_motion(_INSIDE))
+    button.handle_event(_motion(_OUTSIDE))
+    assert button.interaction is InteractionState.IDLE
+    assert button.visual_state() is ButtonState.DEFAULT
+
+
+def test_button_pressed_until_mouse_up() -> None:
+    pygame.init()
+    calls: list[int] = []
+    button = Button((10, 10, 100, 40), "ok", lambda: calls.append(1))
+    button.handle_event(_down(_INSIDE))
+    assert _interaction_of(button) is InteractionState.PRESSED
+    assert button.visual_state() is ButtonState.PRESSED
+    # arrastar com o botão pressionado mantém o estado até o mouse up
+    button.handle_event(_motion(_OUTSIDE))
+    assert _interaction_of(button) is InteractionState.PRESSED
+    assert calls == []
+    button.handle_event(_up(_INSIDE))
+    assert calls == [1]
+    assert _interaction_of(button) is InteractionState.HOVER
+
+
+def test_button_mouse_up_outside_does_not_activate() -> None:
+    pygame.init()
+    calls: list[int] = []
+    button = Button((10, 10, 100, 40), "ok", lambda: calls.append(1))
+    button.handle_event(_down(_INSIDE))
+    button.handle_event(_up(_OUTSIDE))
+    assert calls == []
+    assert button.interaction is InteractionState.IDLE
 
 
 def test_disabled_button_does_not_activate() -> None:
     pygame.init()
     calls: list[int] = []
     button = Button((10, 10, 100, 40), "ok", lambda: calls.append(1), state=ButtonState.DISABLED)
-    event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(50, 30))
-    button.handle_event(event)
+    button.handle_event(_down(_INSIDE))
+    button.handle_event(_up(_INSIDE))
     assert calls == []
     button.activate()
     assert calls == []
+
+
+def test_disabled_button_ignores_pointer() -> None:
+    pygame.init()
+    button = Button((10, 10, 100, 40), "ok", state=ButtonState.DISABLED)
+    button.handle_event(_motion(_INSIDE))
+    assert button.interaction is InteractionState.IDLE
+    button.handle_event(_down(_INSIDE))
+    assert button.interaction is InteractionState.IDLE
+    assert button.visual_state() is ButtonState.DISABLED
+
+
+def test_cooldown_button_does_not_activate() -> None:
+    pygame.init()
+    calls: list[int] = []
+    button = Button((10, 10, 100, 40), "ok", lambda: calls.append(1), state=ButtonState.COOLDOWN)
+    button.handle_event(_motion(_INSIDE))
+    assert button.interaction is InteractionState.IDLE
+    button.handle_event(_down(_INSIDE))
+    button.handle_event(_up(_INSIDE))
+    assert calls == []
+    button.activate()
+    assert calls == []
+
+
+def test_selected_button_keeps_identity_under_hover() -> None:
+    pygame.init()
+    button = Button((10, 10, 100, 40), "ok", state=ButtonState.SELECTED)
+    button.handle_event(_motion(_INSIDE))
+    # o estado semântico tem precedência: hover não vira "selected"
+    assert button.interaction is InteractionState.HOVER
+    assert button.visual_state() is ButtonState.SELECTED
+
+
+def test_focus_ring_distinct_from_hover() -> None:
+    from codecon_amoung_us.ui.theme import TOKENS
+
+    pygame.init()
+    surface = pygame.Surface((400, 300))
+    button = Button((10, 10, 100, 40), "ok")
+    button.draw(surface)
+    ring_pixel = (7, 30)  # anel inflado (6px) à esquerda do botão
+    assert tuple(surface.get_at(ring_pixel))[:3] != TOKENS.focus_ring
+    button.focused = True
+    button.handle_event(_motion(_INSIDE))
+    button.draw(surface)
+    # hover (surface) e foco (anel) coexistem e são distinguíveis
+    assert button.visual_state() is ButtonState.HOVER
+    assert tuple(surface.get_at(ring_pixel))[:3] == TOKENS.focus_ring
 
 
 def test_main_action_targets_are_at_least_40px() -> None:

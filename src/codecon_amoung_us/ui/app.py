@@ -12,7 +12,7 @@ import queue
 import tempfile
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, cast
@@ -67,6 +67,7 @@ from .theme import TOKENS, settings_from_env
 from .viewmodel import (
     VOTING_CARDS_PER_PAGE,
     VoteUiState,
+    VotingLayout,
     derive_game_hud,
     derive_interaction_context,
     derive_report_target,
@@ -257,8 +258,12 @@ class App:
         self.menu_host = self._build_host_menu()
         self.menu_join = self._build_join_menu()
         self.lobby_menu = self._build_lobby_menu()
-        self.menu_buttons: list[Button] = []
         self._current_menu: pygame_menu.Menu | None = None
+        # controles persistentes por tela: hover/pressed e foco sobrevivem
+        # entre frames (botões não são reconstruídos a cada render)
+        self._lobby_ui_state: tuple[list[Button], FocusManager] | None = None
+        self._voting_buttons: list[Button] | None = None
+        self._single_ui_states: dict[str, tuple[list[Button], FocusManager]] = {}
 
     def _push_toast(self, text: str) -> None:
         """Adiciona um toast não modal (máximo 3 visíveis)."""
@@ -336,6 +341,7 @@ class App:
 
     def _show_error(self, message: str) -> None:
         self.error_message = message
+        self._single_ui_states.pop("error", None)
         self.screen_name = "error"
 
     # ------------------------------------------------------------------ conexão
@@ -366,6 +372,7 @@ class App:
         self.connection_state = ConnectionState.CONNECTING
         self.screen_name = "connecting"
         self._current_menu = None
+        self._single_ui_states.pop("connecting", None)
         # Fila e evento por tentativa: resultados de tentativas canceladas caem
         # numa fila órfã (nunca lidos) e o worker faz o próprio teardown.
         self._connection_queue = queue.SimpleQueue()
@@ -453,6 +460,7 @@ class App:
     def _enter_lobby(self) -> None:
         self.screen_name = "lobby"
         self._current_menu = self.lobby_menu
+        self._lobby_ui_state = None
         self._clear_lobby_warning()
         # O JoinAccepted do próprio jogador é consumido dentro de connect();
         # popula o róster a partir do estado guardado no cliente antes do
@@ -501,6 +509,9 @@ class App:
         self.kill_cooldown_until = None
         self.private_ejection = None
         self.pending_game_over = None
+        self._lobby_ui_state = None
+        self._voting_buttons = None
+        self._single_ui_states.clear()
 
     def _exit_to_main(self) -> None:
         """Encerra a conexão e retorna ao menu principal (padrão de saída)."""
@@ -541,6 +552,7 @@ class App:
             self.selected_vote_target = None
             self._voting_page = 0
             self._voting_cursor = 0
+            self._voting_buttons = None
             self._meeting_started_at = time.monotonic()
             self.screen_name = "voting"
         elif isinstance(message, MeetingEnded):
@@ -557,6 +569,7 @@ class App:
                 self._ejection_started_at = time.monotonic()
         elif isinstance(message, GameOver):
             self.game_over = message
+            self._single_ui_states.pop("gameover", None)
             # GameOver pode chegar no mesmo ciclo que Ejected/MeetingEnded;
             # a apresentação da ejeção tem prioridade (duração mínima).
             if self.screen_name in ("ejected", "meeting_ended"):
@@ -709,6 +722,13 @@ class App:
         host_flag = " (host)" if self.is_host else ""
         self.lobby_list_label.set_title(f"Jogadores: {players}{host_flag}")
 
+    @staticmethod
+    def _apply_focus(buttons: list[Button], focus: FocusManager) -> None:
+        """Reflete o botão focado do FocusManager no flag visual de cada botão."""
+        focused = focus.focused
+        for button in buttons:
+            button.focused = button is focused
+
     def _render_lobby(self, events: list[pygame.event.Event]) -> None:
         """Lobby custom: grid de PlayerCard com badge HOST e botões.
 
@@ -766,21 +786,11 @@ class App:
             if self.is_host and len(self.lobby_players) >= 1
             else ButtonState.DISABLED
         )
-        start = Button(
-            (panel.centerx - 250, panel.bottom - 92, 220, 48),
-            "Iniciar (host)",
-            self._start_game,
-            state=start_state,
-        )
-        leave = Button(
-            (panel.centerx + 30, panel.bottom - 92, 220, 48),
-            "Sair",
-            self._leave_lobby,
-        )
-        buttons = [start, leave]
+        buttons, focus = self._lobby_controls(panel)
+        buttons[0].state = start_state
+        self._apply_focus(buttons, focus)
         for button in buttons:
             button.draw(self.screen)
-        focus = FocusManager(buttons)
         for event in events:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self._leave_lobby()
@@ -788,6 +798,39 @@ class App:
             focus.handle_event(event)
             for button in buttons:
                 button.handle_event(event)
+
+    def _lobby_controls(self, panel: pygame.Rect) -> tuple[list[Button], FocusManager]:
+        """Botões + FocusManager do lobby (persistentes entre frames)."""
+        if self._lobby_ui_state is None:
+            buttons = [
+                Button(
+                    (panel.centerx - 250, panel.bottom - 92, 220, 48),
+                    "Iniciar (host)",
+                    self._start_game,
+                ),
+                Button(
+                    (panel.centerx + 30, panel.bottom - 92, 220, 48),
+                    "Sair",
+                    self._leave_lobby,
+                ),
+            ]
+            self._lobby_ui_state = (buttons, FocusManager(buttons))
+        return self._lobby_ui_state
+
+    def _single_button_controls(
+        self,
+        screen: str,
+        rect: tuple[int, int, int, int],
+        label: str,
+        on_click: Callable[[], None],
+    ) -> tuple[list[Button], FocusManager]:
+        """Botão único + FocusManager persistentes (connecting/gameover/error)."""
+        controls = self._single_ui_states.get(screen)
+        if controls is None:
+            button = Button(rect, label, on_click)
+            controls = ([button], FocusManager([button]))
+            self._single_ui_states[screen] = controls
+        return controls
 
     def _lobby_game_id(self) -> str:
         if self.client is not None and self.client.join_accepted is not None:
@@ -970,30 +1013,18 @@ class App:
             )
             self.screen.blit(info, info.get_rect(center=layout.page_info_center))
         button_state = self._vote_button_state()
-        skip_state = (
-            ButtonState.FOCUSED
-            if self._voting_cursor == len(visible_ids) and button_state is ButtonState.DEFAULT
-            else button_state
+        skip_button, vote_button = self._voting_controls(layout)
+        skip_button.rect = pygame.Rect(layout.skip_button)
+        vote_button.rect = pygame.Rect(layout.vote_button)
+        skip_button.state = button_state
+        vote_button.state = button_state
+        skip_button.focused = self._voting_cursor == len(visible_ids) and (
+            button_state is ButtonState.DEFAULT
         )
-        vote_state = (
-            ButtonState.FOCUSED
-            if self._voting_cursor == max_cursor and button_state is ButtonState.DEFAULT
-            else button_state
-        )
-        skip_button = Button(
-            layout.skip_button,
-            "PULAR",
-            lambda: self._cast_vote(None),
-            state=skip_state,
-        )
-        vote_button = Button(
-            layout.vote_button,
-            "VOTAR",
-            lambda: self._cast_vote(self.selected_vote_target),
-            state=vote_state,
+        vote_button.focused = self._voting_cursor == max_cursor and (
+            button_state is ButtonState.DEFAULT
         )
         buttons = [skip_button, vote_button]
-        self.menu_buttons = buttons
         for button in buttons:
             button.draw(self.screen)
         # estados de envio/confirmação (sem duplo envio)
@@ -1051,6 +1082,19 @@ class App:
             return ButtonState.COOLDOWN
         return ButtonState.DEFAULT
 
+    def _voting_controls(self, layout: VotingLayout) -> tuple[Button, Button]:
+        """Botões PULAR/VOTAR persistentes durante a reunião."""
+        if self._voting_buttons is None:
+            self._voting_buttons = [
+                Button(layout.skip_button, "PULAR", lambda: self._cast_vote(None)),
+                Button(
+                    layout.vote_button,
+                    "VOTAR",
+                    lambda: self._cast_vote(self.selected_vote_target),
+                ),
+            ]
+        return self._voting_buttons[0], self._voting_buttons[1]
+
     def _cast_vote(self, target: int | None) -> None:
         """Envia o voto apenas em SELECTING; nunca reenvia após SUBMITTING."""
         if self.client is None or self.meeting is None:
@@ -1074,14 +1118,17 @@ class App:
             "A interface continua responsiva durante a conexão", True, COLOR_TEXT_DIM
         )
         self.screen.blit(hint, hint.get_rect(center=(panel.centerx, panel.y + 110)))
-        cancel = Button(
+        buttons, focus = self._single_button_controls(
+            "connecting",
             (panel.centerx - 100, panel.bottom - 74, 200, 44),
             "Cancelar",
             self._cancel_connecting,
         )
-        cancel.draw(self.screen)
+        self._apply_focus(buttons, focus)
+        buttons[0].draw(self.screen)
         for event in events:
-            cancel.handle_event(event)
+            focus.handle_event(event)
+            buttons[0].handle_event(event)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self._cancel_connecting()
                 return
@@ -1168,19 +1215,20 @@ class App:
                 font=self.font,
             )
             card.draw(self.screen)
-        back = Button(
-            layout.back_button,
-            "VOLTAR AO MENU",
-            self._exit_to_main,
+        buttons, focus = self._single_button_controls(
+            "gameover", layout.back_button, "VOLTAR AO MENU", self._exit_to_main
         )
-        back.draw(self.screen)
+        buttons[0].rect = pygame.Rect(layout.back_button)
+        self._apply_focus(buttons, focus)
+        buttons[0].draw(self.screen)
         hint = self.font.render("ESC também volta ao menu", True, COLOR_TEXT_DIM)
         self.screen.blit(hint, hint.get_rect(center=layout.hint_center))
         keys = pygame.key.get_pressed()
         if keys[pygame.K_ESCAPE]:
             self._exit_to_main()
         for event in events:
-            back.handle_event(event)
+            focus.handle_event(event)
+            buttons[0].handle_event(event)
 
     def _render_error(self, events: list[pygame.event.Event]) -> None:
         self.screen.fill(COLOR_BG)
@@ -1195,12 +1243,17 @@ class App:
             surf = self.font.render(line, True, COLOR_TEXT)
             self.screen.blit(surf, surf.get_rect(center=(panel.centerx, y)))
             y += 34
-        button = Button(
-            (panel.centerx - 100, panel.bottom - 74, 200, 44), "Voltar", self._back_to_main
+        buttons, focus = self._single_button_controls(
+            "error",
+            (panel.centerx - 100, panel.bottom - 74, 200, 44),
+            "Voltar",
+            self._back_to_main,
         )
-        button.draw(self.screen)
+        self._apply_focus(buttons, focus)
+        buttons[0].draw(self.screen)
         for event in events:
-            button.handle_event(event)
+            focus.handle_event(event)
+            buttons[0].handle_event(event)
 
 
 def _wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
