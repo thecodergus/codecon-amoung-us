@@ -106,7 +106,8 @@ assets/maps/skeld.json    mapa Tiled legado (40x30, 32px) — suportado pelo
                           loader, não é mais o padrão
 models/duckee/            sprites dos personagens (8 cores, idle/walk/death)
 models/mapa/              pack do mapa (cena + tileset + overlay de QA)
-scripts/build_lab_map.py  extrai assets/maps/lab.json da cena do lab
+scripts/build_lab_map.py  gera assets/maps/lab.json + cena 2560x1408 a
+                          partir do layout declarado de salas/corredores
 scripts/smoke_multiplayer.py   smoke headless da Etapa 14
 tests/               pytest: unitários, Hypothesis, integração, UI smoke
 plans/among-us-mvp.md plano de execução (decisões de protocolo e etapas)
@@ -183,9 +184,11 @@ uv run mypy
 
 - Partida única por servidor: sem rotação de partidas após o game over (é
   preciso reiniciar o servidor para uma nova rodada).
-- Mapa padrão é o lab (`assets/maps/lab.json`), extraído da cena do pack
-  "Top Down Lab"; o loader aceita outros Tiled (ex.: `skeld.json`), mas a
-  navegação dos testes/smoke assume o layout gerado pelo `build_lab_map.py`.
+- Mapa padrão é o lab (`assets/maps/lab.json`, mundo 2560x1408 com 7 salas),
+  gerado pelo `build_lab_map.py` a partir do tileset do pack "Top Down Lab";
+  o loader aceita outros Tiled (ex.: `skeld.json`), mas a navegação dos
+  testes/smoke assume o layout gerado pelo `build_lab_map.py`. O gameplay usa
+  câmera 2D que segue o jogador local (viewport lógico 1280x704).
 - Sem reconexão: desconectar durante a partida remove o jogador (com
   promoção de host no lobby).
 - Sem persistência: sem histórico, ranking ou contas.

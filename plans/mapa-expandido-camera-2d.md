@@ -1,7 +1,10 @@
 # Plano — Mapa expandido + Câmera 2D
 
-> Status: em execução (2026-08-29). Fonte de verdade: código executável; este
-> plano registra a estratégia aprovada.
+> Status: executado (2026-08-29). Fonte de verdade: código executável; este
+> plano registra a estratégia aprovada. Desvio relevante: `blocked_rects`
+> passou a cobrir todo o vazio (mundo hermético) em vez de apenas a
+> vizinhança do caminhável — elimina bolsões "livres" inalcançáveis e torna
+> o componente livre único.
 
 ## Objetivo
 
