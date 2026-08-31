@@ -3,8 +3,10 @@
 MVP multiplayer estilo Among Us: servidor TCP autoritativo, protocolo 100%
 tipado (`msgspec`), mapa orientado a dados (Tiled via `pytiled-parser`),
 personagens com sprites duckee e cliente Pygame com menus, HUD e votação
-secreta. O mapa padrão é a cena do lab (pack "Top Down Lab") com colisão,
-spawns e tarefas extraídos programaticamente.
+secreta. Os mapas são procedurais: cada partida recebe uma seed (protocolo
+v3) e o servidor e os clientes constroem deterministicamente a mesma
+geometria validada (12 salas, corredores com ciclos) com cena pastel gerada
+por primitivas.
 
 ## Stack
 
@@ -191,11 +193,11 @@ src/codecon_amoung_us/
                      sprites.py (duckee) + task_props.py (estações) +
                      puzzles/ (7 minigames de tarefa:
                      lógica pura testável + wrapper pygame)
-assets/maps/lab.json      mapa Tiled (70x38, 64px, 4480x2432): paredes, spawns,
-                          28 estações de tarefa (7 tipos, 4 instâncias de cada),
-                          botão de emergência, 12 salas —
-                          gerado pelo build_lab_map.py
-assets/maps/lab_scene.png cena do lab em resolução de mundo (fundo do jogo)
+assets/maps/lab.json      mapa Tiled (70x38, 64px, 4480x2432) da seed padrão
+                          (42): paredes, spawns, 22 estações de tarefa (7 tipos),
+                          botão de emergência, 12 salas — usado em menus/lobby;
+                          em partida o mapa é gerado pela seed do servidor
+assets/maps/lab_scene.png cena pastel em resolução de mundo (fundo dos menus)
 assets/maps/skeld.json    mapa Tiled legado (40x30, 32px) — suportado pelo
                           loader, não é mais o padrão
 assets/tasks/             sprites 64x64 das estações de tarefa (um objeto por
@@ -204,10 +206,12 @@ assets/tasks/             sprites 64x64 das estações de tarefa (um objeto por
 models/duckee/            sprites dos personagens (8 cores, idle/walk/death)
 models/mapa/              pack do mapa "Top Down Lab", de Luis Zuno
                           (@ansimuz — ansimuz.itch.io; licença permissiva em
-                          "Top Down Lab files/public-license.txt"): tileset
-                          da cena + overlay de QA
-scripts/build_lab_map.py  gera assets/maps/lab.json + cena 2560x1408 a
-                          partir do layout declarado de salas/corredores
+                          "Top Down Lab files/public-license.txt") + overlay
+                          de QA do mapa gerado
+scripts/build_lab_map.py  regenera os assets da seed padrão a partir do
+                          gerador procedural (map/generator.py) + cena pastel
+                          (map/scene.py); --seed N gera outra seed; --check é
+                          o gate de frescor do CI
 scripts/build_task_props.py   gera assets/tasks/*.png (estações como objetos
                           pixel-art coerentes com o tileset do pack)
 scripts/smoke_multiplayer.py   smoke headless da Etapa 14
@@ -286,10 +290,12 @@ uv run mypy
 
 - Partida única por servidor: sem rotação de partidas após o game over (é
   preciso reiniciar o servidor para uma nova rodada).
-- Mapa padrão é o lab (`assets/maps/lab.json`, mundo 2560x1408 com 7 salas),
-  gerado pelo `build_lab_map.py` a partir do tileset do pack "Top Down Lab";
-  o loader aceita outros Tiled (ex.: `skeld.json`), mas a navegação dos
-  testes/smoke assume o layout gerado pelo `build_lab_map.py`. O gameplay usa
+- Mapas procedurais por seed (gerador em `src/codecon_amoung_us/map/
+  generator.py`, cena pastel em `map/scene.py`): o servidor sorteia uma seed
+  por partida (`--seed N` fixa para testes/demo) e os clientes reconstroem a
+  mesma geometria — determinismo garantido por RNG inteiro e testado entre
+  processos. O loader Tiled aceita assets customizados (`--map`), mas a
+  navegação dos testes/smoke assume o layout da seed 42. O gameplay usa
   câmera 2D que segue o jogador local (viewport lógico 1280x704).
 - Sem reconexão: desconectar durante a partida remove o jogador (com
   promoção de host no lobby).
