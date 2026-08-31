@@ -78,13 +78,15 @@ manual continua disponível como fallback (ex.: broadcast bloqueado pelo
 roteador). O lobby do host exibe o IP local e as portas para compartilhar
 manualmente se preciso.
 
-**Correção de permissões em um clique.** Se o firewall do próprio host
-bloquear a escuta (bind), a tela de criar partida oferece
-"Corrigir permissões de rede (requer admin)": no Windows cria a regra inbound
-para o executável do jogo via `netsh advfirewall` com elevação UAC (opt-in —
-só roda no clique); no Linux exibe o comando pronto
-(`sudo ufw allow <porta>/tcp && sudo ufw allow 5557/udp`). A busca vazia e os
-erros de conexão também exibem diagnóstico orientado por sistema.
+**Sem admin/sudo (restrição do público-alvo).** As portas padrão
+(5555/5556/5557) são não privilegiadas e o jogo nunca exige elevação. Se a
+porta pedida estiver ocupada/reservada ou o bind for negado, o host sobe
+automaticamente em porta efêmera (`start_host_server`) — a descoberta
+anuncia a porta real e a lista de salas funciona igual, sem reconfiguração.
+No Windows, o alerta de firewall da primeira escuta ("Permitir acesso") não
+requer administrador — aceite-o. Sem o alerta (descartado antes) ou com
+firewall de rede, liberar portas depende do administrador; a busca vazia e
+os erros de conexão exibem diagnóstico orientado por sistema.
 
 **Transporte WebSocket (padrão ouro) e TCP (fallback).** O servidor escuta
 TCP cru e WebSocket simultaneamente; o cliente tenta WebSocket primeiro e
