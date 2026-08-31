@@ -1,6 +1,40 @@
 # Mapas procedurais por seed com estética pastel (runtime por partida)
 
-Data: 2026-08-30. Status: em execução.
+Data: 2026-08-30. Status: **concluído** (commits f0ee3c1, 27b122c, cdaef3c, 23cb152).
+
+## Resultados da execução (2026-08-30)
+
+- Gerador (`map/generator.py`): 300 seeds → 300 layouts válidos e distintos,
+  ~8 ms/mapa, determinístico (inclusive entre processos, testado por hash
+  SHA-256 do documento Tiled).
+- Cena pastel (`map/scene.py`): ~45 ms para renderizar 4480x2432; pixels
+  determinísticos; overlays de QA das seeds 42 e 2026 visualmente distintos
+  (paleta rosa/verde-escuro vs creme/roxo) e fofos (corações, flores,
+  estrelas, arbustos, contornos arredondados).
+- Suíte: 889 passed no modo nativo (Cython) e 889 passed no modo puro
+  (sem extensões); ruff + format + mypy strict limpos; `--check` de frescor
+  verde; smoke multiplayer E2E OK (modo puro, como no CI).
+
+### Desvios materialmente relevantes do plano
+
+1. **Spawns: núcleo no hub + dispersão** (em vez de farthest-point puro): a
+   dispersão máxima produzia distâncias spawn-a-spawn de ~4000 px, inviável
+   para o pacing de início de partida (e para os deadlines dos helpers de
+   navegação dos testes). Metade dos spawns agora fica no hub (spawn social,
+   como na cafeteria do original); o restante dispersa por farthest-point.
+2. **`MapSeed` com `le=2**63 - 1`** (em vez de `lt=2**63`): o msgspec não
+   suporta bounds fora de int64.
+3. **Bug encontrado no Prim** (loop infinito em `_connectivity_edges`:
+   chave ordenada (min,max) usada como endpoints) — corrigido antes do
+   primeiro commit do gerador; o teste de 300 seeds é o gate de regressão.
+4. **Smoke E2E verificado em modo puro**: `python -m` não executa módulo
+   sombreado por `.so` in-place (artefato pré-existente do dev loop Cython,
+   não introduzido por esta mudança); o CI roda o smoke em checkout limpo
+   (sem `.so` in-place) e no job `test-pure`.
+5. **Lição de ambiente (permanente)**: o setup.py cythoniza todo o pacote;
+   após editar qualquer `.py` de `src/`, é preciso
+   `uv run python setup.py build_ext --inplace` — o `.so` stale tem
+   precedência de import sobre o `.py` (o `uv sync` cacheia e não recompila).
 
 ## Objetivo
 
