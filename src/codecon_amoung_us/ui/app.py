@@ -30,6 +30,7 @@ from ..map.model import GameMap
 from ..map.scene import render_scene
 from ..net.client import GameClient
 from ..net.discovery import DiscoveredGame, discover_games
+from ..net.firewall_hints import discovery_empty_tips, hint_for_bind_error
 from ..net.server import GameServer
 from ..protocol import (
     ActionAccepted,
@@ -446,11 +447,8 @@ class App:
         menu = pygame_menu.Menu("Partidas na rede", WINDOW_W, WINDOW_H, theme=self._theme)
         if not games:
             menu.add.label("Nenhuma partida encontrada.", font_color=COLOR_TEXT_DIM)
-            menu.add.label(
-                "Confira se o host criou a partida; em Wi-Fi com isolamento",
-                font_color=COLOR_TEXT_DIM,
-            )
-            menu.add.label("de clientes, só a conexão por IP funciona.", font_color=COLOR_TEXT_DIM)
+            for tip in discovery_empty_tips():
+                menu.add.label(tip, font_size=14, font_color=COLOR_TEXT_DIM)
         for game in games:
             host_name = game.host_name or "?"
             label = f"{host_name} — {game.ip} ({game.players}/{game.max_players})"
@@ -615,7 +613,10 @@ class App:
         except (OSError, TimeoutError) as exc:
             if server is not None:
                 server.stop()
-            attempt_queue.put(ConnectionFailure(message=str(exc)))
+            # Diagnóstico: falha de bind por permissão vira dica de firewall.
+            hint = hint_for_bind_error(exc) if isinstance(exc, OSError) else None
+            message = f"{exc}\n\n{hint}" if hint else str(exc)
+            attempt_queue.put(ConnectionFailure(message=message))
 
     def _poll_connection(self) -> None:
         """Consome o resultado do worker na thread gráfica (main loop)."""
