@@ -26,6 +26,7 @@ from ..game.meeting import Meeting, MeetingOutcome, MeetingReason
 from ..game.model import GameState, Phase, PlayerState, Role, Task
 from ..game.rules import apply_kill, can_report, check_win, complete_task
 from ..game.tasks import assign_tasks
+from ..map.generator import generate_map
 from ..map.loader import load_map
 from ..map.model import GameMap
 from ..protocol import (
@@ -165,22 +166,19 @@ class GameServer:
         else:
             self.config = config if config is not None else GameConfig()
         self._game_map: GameMap = load_map(self.config.resolve_map_path())
+        self._map_seed: int | None = None
+        if self.config.map_path is None:
+            # Mapa procedural: o asset Tiled só é usado quando configurado
+            # explicitamente; o padrão é gerar por seed (uma por partida).
+            self._map_seed = self._match_map_seed()
+            self._game_map = generate_map(self._map_seed)
         # Paredes achatadas uma única vez: o kernel de colisão
         # (game/_native_collision.py, equivalência property-tested com
         # game/physics.py) não toca objetos Rect no hot loop do tick.
         self._flat_walls: FlatWalls = flatten_walls(self._game_map.walls)
 
         self._state = GameState(game_id="game-1")
-        self._state.tasks = [
-            Task(
-                task_id=t.task_id,
-                task_type=t.task_type,
-                x=t.x,
-                y=t.y,
-                interaction_radius=t.interaction_radius,
-            )
-            for t in self._game_map.task_points
-        ]
+        self._state.tasks = self._tasks_from_map(self._game_map)
 
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -201,6 +199,48 @@ class GameServer:
         self._ws_listener: WSListener | None = None
 
     # ------------------------------------------------------------------ lifecycle
+
+    def _match_map_seed(self) -> int:
+        """Seed da partida: fixa da config (testes/demo) ou aleatória."""
+        if self.config.map_seed is not None:
+            return self.config.map_seed
+        return random.SystemRandom().randrange(2**63)
+
+    @staticmethod
+    def _tasks_from_map(game_map: GameMap) -> list[Task]:
+        return [
+            Task(
+                task_id=t.task_id,
+                task_type=t.task_type,
+                x=t.x,
+                y=t.y,
+                interaction_radius=t.interaction_radius,
+            )
+            for t in game_map.task_points
+        ]
+
+    def _regenerate_match_map(self) -> None:
+        """(Re)gera o mapa procedural da partida que vai começar.
+
+        Sem efeito para mapas de asset (``map_path`` configurado) nem quando
+        a seed já está em uso (primeira partida, ou seed fixa repetida).
+        Reposiciona os jogadores do lobby nos spawns do mapa novo: posições
+        de lobby nunca foram transmitidas (snapshot só na fase PLAYING).
+        """
+        if self._map_seed is None:
+            return
+        seed = self._match_map_seed()
+        if seed != self._map_seed:
+            self._map_seed = seed
+            self._game_map = generate_map(seed)
+            self._flat_walls = flatten_walls(self._game_map.walls)
+            self._state.tasks = self._tasks_from_map(self._game_map)
+        spawn_points = self._game_map.spawn_points
+        for index, player in enumerate(
+            sorted(self._state.players.values(), key=lambda p: p.player_id)
+        ):
+            spawn = spawn_points[index % max(1, len(spawn_points))]
+            player.x, player.y = spawn.x, spawn.y
 
     @property
     def ws_port(self) -> int | None:
@@ -501,6 +541,10 @@ class GameServer:
         self._start_game(outbox)
 
     def _start_game(self, outbox: list[_OutboxItem]) -> None:
+        # Mapa da partida: (re)gera pela seed e reposiciona os jogadores nos
+        # spawns ANTES de qualquer mensagem (StartGame carrega a seed para os
+        # clientes reconstruírem a mesma geometria).
+        self._regenerate_match_map()
         players = sorted(self._state.players.values(), key=lambda p: p.player_id)
         impostor_count = min(self.config.impostor_count, len(players) - 1)
         shuffled = list(players)
@@ -516,6 +560,7 @@ class GameServer:
                 None,
                 StartGame(
                     map_name=self._game_map.name,
+                    map_seed=self._map_seed if self._map_seed is not None else 0,
                     players=[
                         PlayerInfo(player_id=p.player_id, nickname=p.nickname) for p in players
                     ],
@@ -1021,6 +1066,8 @@ def _server_config(args: argparse.Namespace) -> GameConfig:
         raise ValueError(f"tick-rate deve ser >= 1: {args.tick_rate}")
     if args.max_players is not None and not 1 <= args.max_players <= MAX_PLAYERS:
         raise ValueError(f"max-players deve estar em [1, {MAX_PLAYERS}]: {args.max_players}")
+    if args.seed is not None and not 0 <= args.seed < 2**63:
+        raise ValueError(f"seed fora do intervalo [0, 2**63): {args.seed}")
     config = GameConfig()
     if args.ws_port is not None:
         config = dataclasses.replace(config, ws_port=args.ws_port)
@@ -1028,6 +1075,8 @@ def _server_config(args: argparse.Namespace) -> GameConfig:
         config = dataclasses.replace(config, max_players=args.max_players)
     if args.tick_rate is not None:
         config = dataclasses.replace(config, tick_rate=args.tick_rate)
+    if args.seed is not None:
+        config = dataclasses.replace(config, map_seed=args.seed)
     return config
 
 
@@ -1042,6 +1091,12 @@ def main(argv: list[str] | None = None) -> None:
         help="porta WebSocket (transporte preferencial; ex.: 80 atravessa firewalls)",
     )
     parser.add_argument("--map", default=None, help="caminho do mapa Tiled (default: lab)")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="seed fixa do gerador procedural (default: aleatória por partida)",
+    )
     parser.add_argument("--max-players", type=int, default=None, help="limite de jogadores")
     parser.add_argument("--tick-rate", type=int, default=None, help="ticks por segundo")
     args = parser.parse_args(argv)

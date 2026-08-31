@@ -61,7 +61,8 @@ MESSAGES = [
     PlayerJoined(player=LobbyPlayer(player_id=1, nickname="ana")),
     PlayerDisconnected(player_id=2),
     StartGame(
-        map_name="lab",
+        map_name="mapa-42",
+        map_seed=42,
         players=[PlayerInfo(player_id=0, nickname="gus"), PlayerInfo(player_id=1, nickname="ana")],
     ),
     RoleAssigned(role=Role.IMPOSTOR, task_ids=[]),
@@ -146,9 +147,9 @@ def test_nickname_too_long_rejected() -> None:
 
 
 def test_protocol_version_unsupported_rejected() -> None:
-    # v2 é a versão corrente; v1 ainda decodifica (ge=1); v3 é rejeitada.
+    # v3 é a versão corrente; v1 e v2 ainda decodificam (ge=1); v4 é rejeitada.
     with pytest.raises(msgspec.ValidationError):
-        decode(b'{"type":"JoinRequest","nickname":"gus","protocol_version":3}')
+        decode(b'{"type":"JoinRequest","nickname":"gus","protocol_version":4}')
 
 
 def test_protocol_version_1_still_decodes() -> None:

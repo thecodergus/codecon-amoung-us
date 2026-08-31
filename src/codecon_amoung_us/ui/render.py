@@ -113,7 +113,13 @@ def _draw_text_with_outline(
 class Renderer:
     """Desenha o estado do jogo em uma superfície."""
 
-    def __init__(self, game_map: GameMap, *, reduced_motion: bool = False) -> None:
+    def __init__(
+        self,
+        game_map: GameMap,
+        *,
+        reduced_motion: bool = False,
+        scene: pygame.Surface | None = None,
+    ) -> None:
         self.game_map = game_map
         self.reduced_motion = reduced_motion
         self.fonts = FontBook()
@@ -122,7 +128,9 @@ class Renderer:
         self.font_big = self.fonts.heading
         self.sprites = DuckeeSprites()
         self.task_props = TaskProps()
-        self._background = self._load_background()
+        # Cena procedural (gerada pela seed da partida) ou asset commitado
+        # (menus/lobby, antes do StartGame).
+        self._background = scene if scene is not None else self._load_background()
         # animação por jogador: relógio interno avançado por dt (determinístico
         # em testes; independe de pygame.time.get_ticks)
         self._player_anims: dict[int, _PlayerAnimState] = {}

@@ -24,8 +24,10 @@ import pygame_menu
 
 from ..config import GameConfig, default_assets_dir, default_map_path
 from ..game.model import Role
+from ..map.generator import generate_map
 from ..map.loader import load_map
 from ..map.model import GameMap
+from ..map.scene import render_scene
 from ..net.client import GameClient
 from ..net.discovery import DiscoveredGame, discover_games
 from ..net.server import GameServer
@@ -732,6 +734,17 @@ class App:
         elif isinstance(message, PlayerDisconnected):
             self.lobby_players = [p for p in self.lobby_players if p.player_id != message.player_id]
         elif isinstance(message, StartGame):
+            # Mapa procedural da partida: reconstrói a geometria exata do
+            # servidor a partir da seed e recompõe renderer/câmera.
+            self.game_map = generate_map(message.map_seed)
+            self.renderer = Renderer(
+                self.game_map,
+                reduced_motion=self.ui_settings.reduced_motion,
+                scene=render_scene(self.game_map, message.map_seed),
+            )
+            self.camera = Camera2D(
+                viewport_size=(WINDOW_W, WORLD_HEIGHT), bounds=self.game_map.bounds()
+            )
             self.screen_name = Screen.GAME
             self.lobby_players = []
             self._camera_needs_snap = True

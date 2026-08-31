@@ -299,7 +299,6 @@ def menu_crop(scene: pygame.Surface, game_map: GameMap) -> pygame.Surface:
 
 def overlay_surface(scene: pygame.Surface, game_map: GameMap) -> pygame.Surface:
     """Cena + paredes magenta + marcadores de gameplay (QA humana)."""
-    tile = game_map.tile_width
     canvas = scene.copy()
     overlay = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
     for wall in game_map.walls:

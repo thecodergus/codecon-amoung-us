@@ -228,19 +228,35 @@ def _carve_corridor(
 # ---------------------------------------------------------------------------
 # Estágio 4 — pontos de gameplay (emergência, spawns, tarefas).
 # ---------------------------------------------------------------------------
-def _place_spawns(rng: random.Random, candidates: list[_Cell], emergency: _Cell) -> list[_Cell]:
-    """Spawns por farthest-point greedy a partir de um primeiro ponto seedado.
+def _place_spawns(
+    rng: random.Random,
+    hub_cells: list[_Cell],
+    room_cells: list[_Cell],
+    emergency: _Cell,
+) -> list[_Cell]:
+    """Spawns: núcleo no hub (spawn social de início de partida) + dispersos.
 
-    A margem de 4 células para o botão supera o gate formal (Manhattan >= 2).
+    Metade dos spawns (arredondada para cima) fica no hub — como na cafeteria
+    do original, encurtando o primeiro encontro entre jogadores; o restante
+    é distribuído por farthest-point greedy pelas demais salas. A margem de
+    4 células para o botão supera o gate formal (Manhattan >= 2).
     """
-    pool = [
+    far = [
         cell
-        for cell in sorted(candidates)
+        for cell in sorted(room_cells)
         if abs(cell[0] - emergency[0]) + abs(cell[1] - emergency[1]) >= 4
     ]
-    if len(pool) < MAX_PLAYERS:
-        raise BuildError(f"pool de spawns pequeno demais: {len(pool)}")
-    chosen = [pool[rng.randrange(len(pool))]]
+    hub_pool = [cell for cell in sorted(hub_cells) if cell in set(far)]
+    rng.shuffle(hub_pool)
+    chosen: list[_Cell] = []
+    for cell in hub_pool:
+        if len(chosen) >= (MAX_PLAYERS + 1) // 2:
+            break
+        if all(math.dist(cell, other) >= 1.5 for other in chosen):
+            chosen.append(cell)
+    if len(chosen) < (MAX_PLAYERS + 1) // 2:
+        raise BuildError("hub sem espaço para os spawns centrais")
+    pool = [cell for cell in far if cell not in chosen]
     while len(chosen) < MAX_PLAYERS:
         best_cell: _Cell | None = None
         best_dist = -1.0
@@ -463,7 +479,8 @@ def _attempt(rng: random.Random, cfg: GenConfig, seed: int) -> GameMap:
     room_cells: set[_Cell] = set()
     for _name, x, y, w, h in rooms:
         room_cells |= _rect_cells(x, y, w, h)
-    spawns = _place_spawns(rng, sorted(room_cells), emergency)
+    hub_name = rooms[hub_index][0]
+    spawns = _place_spawns(rng, sorted(regions[hub_name]), sorted(room_cells), emergency)
     taken: set[_Cell] = {emergency, *spawns}
     tasks = _place_tasks(rng, rooms, hub_index, taken, cfg)
 

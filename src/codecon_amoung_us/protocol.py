@@ -22,6 +22,7 @@ __all__ = [
     "PlayerId",
     "MessageId",
     "Tick",
+    "MapSeed",
     "ActionKind",
     "DenialCode",
     "MessageBase",
@@ -68,8 +69,10 @@ type Nickname = Annotated[
 type PlayerId = Annotated[int, msgspec.Meta(ge=0, lt=2**31)]
 type MessageId = Annotated[int, msgspec.Meta(ge=1, lt=2**31)]
 type Tick = Annotated[int, msgspec.Meta(ge=0, lt=2**31)]
-type ProtocolVersion = Annotated[int, msgspec.Meta(ge=1, le=2)]
+type ProtocolVersion = Annotated[int, msgspec.Meta(ge=1, le=3)]
 type FloatRange = Annotated[float, msgspec.Meta(ge=-1e6, le=1e6)]
+# Seed inteira do gerador procedural de mapas (random.Random; 63 bits).
+type MapSeed = Annotated[int, msgspec.Meta(ge=0, le=2**63 - 1)]
 
 
 class ActionKind(StrEnum):
@@ -200,6 +203,9 @@ class PlayerDisconnected(MessageBase):
 
 class StartGame(MessageBase):
     map_name: str
+    # Seed do mapa procedural da partida: o cliente reconstrói a geometria
+    # exata do servidor com ``map.generator.generate_map(map_seed)``.
+    map_seed: MapSeed
     players: Annotated[list[PlayerInfo], msgspec.Meta(max_length=MAX_PLAYERS)]
 
 

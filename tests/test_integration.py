@@ -84,8 +84,13 @@ def _raw_join(
 
 @pytest.fixture
 def server() -> Iterator[GameServer]:
-    """Servidor em porta efêmera com shutdown limpo garantido."""
-    srv = GameServer(host="127.0.0.1", port=_free_port(), config=GameConfig())
+    """Servidor em porta efêmera com shutdown limpo garantido.
+
+    ``map_seed=42``: a geometria gerada é idêntica à do asset commitado
+    (``assets/maps/lab.json``, seed 42), que os helpers de navegação
+    (``_move_to_point``) carregam para planejar rotas BFS.
+    """
+    srv = GameServer(host="127.0.0.1", port=_free_port(), config=GameConfig(map_seed=42))
     srv.start()
     yield srv
     srv.stop()
@@ -127,7 +132,7 @@ def test_start_game_assigns_one_impostor(
     host.start_game()
     for client in four_clients:
         start = client.wait_for(StartGame, timeout=5.0)
-        assert start.map_name == "lab"
+        assert start.map_name == "mapa-42"  # seed fixa da fixture
         assert len(start.players) == 4
         assigned = client.wait_for(RoleAssigned, timeout=5.0)
         assert assigned.role in (Role.CREW, Role.IMPOSTOR)
@@ -161,7 +166,7 @@ def test_solo_host_starts_and_wins_by_tasks(server: GameServer) -> None:
         client.connect("127.0.0.1", server.port, "solo", timeout=5.0)
         client.start_game()
         start = client.wait_for(StartGame, timeout=5.0)
-        assert start.map_name == "lab"
+        assert start.map_name == "mapa-42"  # seed fixa da fixture
         assert len(start.players) == 1
         assigned = client.wait_for(RoleAssigned, timeout=5.0)
         assert assigned.role is Role.CREW
@@ -375,7 +380,7 @@ def _move_next_to(impostor: GameClient, target_id: int, kill_radius: float) -> b
     import math
     import time as _time
 
-    deadline = _time.monotonic() + 8.0
+    deadline = _time.monotonic() + 25.0
     while _time.monotonic() < deadline:
         snap = impostor.snapshot
         if snap is None:
@@ -585,7 +590,7 @@ def test_denials_for_dead_players_do_not_reveal_ejection() -> None:
     srv = GameServer(
         host="127.0.0.1",
         port=_free_port(),
-        config=GameConfig(kill_cooldown_seconds=0.5),
+        config=GameConfig(kill_cooldown_seconds=0.5, map_seed=42),
     )
     srv.start()
     clients = [GameClient() for _ in range(6)]
@@ -864,7 +869,9 @@ def test_duplicate_join_rejected(server: GameServer, four_clients: list[GameClie
 
 @pytest.mark.timeout(30)
 def test_lobby_full_rejected_with_protocol_error() -> None:
-    srv = GameServer(host="127.0.0.1", port=_free_port(), config=GameConfig(max_players=1))
+    srv = GameServer(
+        host="127.0.0.1", port=_free_port(), config=GameConfig(max_players=1, map_seed=42)
+    )
     srv.start()
     first = GameClient()
     try:
@@ -961,7 +968,7 @@ def test_meeting_timeout_finishes_without_votes() -> None:
     srv = GameServer(
         host="127.0.0.1",
         port=_free_port(),
-        config=GameConfig(meeting_vote_timeout_seconds=1.0),
+        config=GameConfig(meeting_vote_timeout_seconds=1.0, map_seed=42),
     )
     srv.start()
     clients = [GameClient() for _ in range(4)]
@@ -1162,7 +1169,7 @@ def test_command_queue_backpressure_blocks_and_recovers() -> None:
 
     from codecon_amoung_us.net.server import ClientConnection
 
-    srv = GameServer(host="127.0.0.1", port=_free_port(), config=GameConfig())
+    srv = GameServer(host="127.0.0.1", port=_free_port(), config=GameConfig(map_seed=42))
     assert srv._commands.maxsize == COMMAND_QUEUE_MAXSIZE
     sock_a, sock_b = socket.socketpair()
     conn = ClientConnection(srv, sock_a)
@@ -1214,3 +1221,73 @@ def test_game_loop_survives_tick_exception(
     assert server._state.tick >= tick0 + 3
     assert calls["n"] >= 2  # falhou uma vez e continuou processando
     assert "erro contido no tick do game loop" in caplog.text
+
+
+@pytest.mark.timeout(30)
+def test_start_game_carries_fixed_map_seed_and_matching_geometry() -> None:
+    """Seed fixa da config chega no StartGame e reproduz o mapa do servidor."""
+    from codecon_amoung_us.map.generator import generate_map
+
+    srv = GameServer(
+        host="127.0.0.1",
+        port=_free_port(),
+        config=GameConfig(map_seed=123, min_players_to_start=1),
+    )
+    srv.start()
+    try:
+        client = GameClient()
+        client.connect("127.0.0.1", srv.port, "host", timeout=5.0)
+        client.start_game()
+        start = client.wait_for(StartGame, timeout=5.0)
+        assert start.map_seed == 123
+        assert generate_map(start.map_seed) == srv._game_map
+        client.close()
+    finally:
+        srv.stop()
+
+
+@pytest.mark.timeout(30)
+def test_match_map_regenerated_between_matches_with_random_seed() -> None:
+    """Sem seed fixa, a segunda partida sorteia seed nova (mapa por partida)."""
+    srv = GameServer(
+        host="127.0.0.1",
+        port=_free_port(),
+        config=GameConfig(min_players_to_start=1),
+    )
+    srv.start()
+    try:
+        first_seed = srv._map_seed
+        assert first_seed is not None
+        client = GameClient()
+        client.connect("127.0.0.1", srv.port, "host", timeout=5.0)
+        client.start_game()
+        client.wait_for(StartGame, timeout=5.0)
+        srv._state.phase = Phase.LOBBY  # simula o retorno ao lobby pós-partida
+        from codecon_amoung_us.net.server import Connection
+        from codecon_amoung_us.protocol import Message
+
+        outbox: list[tuple[Connection | None, Message]] = []
+        srv._start_game(outbox)  # segunda partida no mesmo processo
+        start_msgs = [msg for _target, msg in outbox if isinstance(msg, StartGame)]
+        assert srv._map_seed != first_seed
+        assert start_msgs and start_msgs[0].map_seed == srv._map_seed
+        client.close()
+    finally:
+        srv.stop()
+
+
+@pytest.mark.timeout(30)
+def test_custom_map_path_still_loads_tiled_asset() -> None:
+    """``map_path`` configurado mantém o fluxo de asset (sem gerador)."""
+    from codecon_amoung_us.config import default_map_path
+
+    srv = GameServer(
+        host="127.0.0.1",
+        port=_free_port(),
+        map_path=default_map_path(),
+    )
+    try:
+        assert srv._map_seed is None
+        assert srv._game_map.name == "lab"
+    finally:
+        srv.stop()

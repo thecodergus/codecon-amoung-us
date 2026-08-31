@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Limites do protocolo (espelhados como constraints no msgspec — protocol.py).
-PROTOCOL_VERSION: int = 2
+# v3: StartGame carrega ``map_seed`` (mapas procedurais por partida).
+PROTOCOL_VERSION: int = 3
 NICKNAME_MIN_LENGTH: int = 1
 NICKNAME_MAX_LENGTH: int = 12
 MAX_PLAYERS: int = 10
@@ -107,6 +108,10 @@ class GameConfig:
     min_players_to_start: int = 1
     impostor_count: int = 1
     map_path: Path | None = None
+    # Seed fixa do gerador procedural de mapas (testes/demo reproduzível);
+    # None = seed aleatória sorteada a cada partida. Ignorada quando
+    # ``map_path`` aponta para um asset Tiled customizado.
+    map_seed: int | None = None
     # Timeout do recv loop das threads de conexão (evita bloqueio infinito).
     socket_timeout_seconds: float = 0.2
     # Tempo máximo de shutdown por thread (rede de segurança).

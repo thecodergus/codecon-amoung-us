@@ -86,7 +86,7 @@ def test_invalid_json_raises_frame_error() -> None:
 def test_schema_rejection_raises_frame_error() -> None:
     decoder = FrameDecoder()
     with pytest.raises(FrameError):
-        decoder.feed(b'{"type":"JoinRequest","nickname":"gus","protocol_version":3}\n')
+        decoder.feed(b'{"type":"JoinRequest","nickname":"gus","protocol_version":4}\n')
 
 
 def test_truncated_json_raises_frame_error() -> None:
