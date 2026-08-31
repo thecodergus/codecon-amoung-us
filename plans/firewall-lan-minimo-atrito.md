@@ -71,24 +71,27 @@ por decisão do usuário (sem infra externa).
   firewall do host?).
 - **Verificar:** unitários do mapeamento; smoke de UI segue verde.
 
-### Etapa 3 — Correção de rede em um clique (opt-in, com elevação)
+### Etapa 3 — Sem admin/sudo: cascata de portas no host (revisada)
 
-- **Onde:** módulo novo `net/firewall_fix.py` + botão na UI (tela de criar
-  partida / tela de erro).
-- **O que muda:** botão "Corrigir permissões de rede (requer admin)":
-  - Windows: construir
-    `netsh advfirewall firewall add rule name="Codecon Among Us" dir=in
-    action=allow program=<sys.executable> enable=yes profile=any` e executar
-    com elevação UAC via `ctypes.windll.shell32.ShellExecuteW` ("runas").
-    Usar `sys.executable` (funciona com venv e binário empacotado).
-  - Linux: exibir o comando pronto (`sudo ufw allow <porta>` / `setcap`) —
-    sem executar sudo por baixo do usuário.
-- **Restrições:** nunca automático (só clique explícito); recusa de elevação
-  vira mensagem clara, não crash; separar **construção** do comando da
-  **execução** para testar sem elevar.
-- **Dependência:** Etapa 2 (a dica aponta para o botão).
-- **Verificar:** unitários da construção do comando por SO; execução real com
-  elevação é verificação manual (não automatizável em CI).
+**Atualização (2026-08-31, durante a execução):** restrição nova do
+usuário — **os usuários NUNCA terão admin/sudo**. A Etapa 3 original
+(elevação UAC/`netsh` + comando `sudo`) foi **implementada e depois
+removida** (commit `520be26`): inútil no ambiente-alvo. Substituída por:
+
+- `net/server.py::start_host_server(tcp_port, ws_port)` — cascata de portas
+  sem elevação: (pedida, com WS) → (pedida, sem WS) → (efêmera, sem WS);
+  absorve `OSError` e `OverflowError` (porta > 65535 no bind). A descoberta
+  anuncia a porta efetiva, então a porta pedida é prescindível — bind
+  negado/ocupado não derruba a criação da partida. UI worker
+  (`ui/app.py::_connect_worker`) delega para a função.
+- `net/firewall_hints.py` — dicas nunca mandam elevar privilégios: Windows
+  aponta para o alerta "Permitir acesso" (não requer admin); Linux declara
+  honestamente que liberar porta exige o administrador.
+- Testes: `tests/test_host_server.py` (6 casos: portas pedidas, WS ocupado,
+  porta ocupada → efêmera, porta inválida → efêmera, todas falham → último
+  erro, join real na porta efetiva).
+- Commits: `520be26` (remoção da elevação + dicas sem sudo), `b38698f`
+  (cascata de portas), `aff7b62` (README).
 
 ### Etapa 4 — Documentação
 
@@ -99,7 +102,9 @@ por decisão do usuário (sem infra externa).
 
 - **100% sem firewall é impossível em LAN pura** (escuta inbound é inerente
   ao host de jogo) — a alternativa real era o relay, descartada por decisão
-  do usuário (2026-08-31).
+  do usuário (2026-08-31). Com a restrição "sem admin/sudo", o atrito
+  remanescente só o administrador da máquina/rede pode remover; o jogo
+  absorve o que dá (porta efêmera + descoberta) e comunica o resto.
 - **mDNS rejeitado** (mesmos bloqueios + dependência nova + falha
   silenciosa); **UPnP rejeitado** (mapeia roteador, não resolve firewall de
   host); **ARP-scan rejeitado** (raw sockets/privégios, custo
