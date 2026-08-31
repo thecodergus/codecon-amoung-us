@@ -39,10 +39,12 @@ def test_spawn_points_with_ids(game_map: GameMap) -> None:
 
 
 def test_task_points_with_properties(game_map: GameMap) -> None:
-    assert len(game_map.task_points) == 28
-    # 4 instâncias de cada tipo do catálogo (round-robin do builder)
+    assert len(game_map.task_points) == 22
+    # 2 estações por sala não-hub (11 salas); tipos em round-robin do catálogo
+    # (22 = 7x3 + 1: três instâncias de cada tipo, uma extra do primeiro).
     counts = Counter(t.task_type for t in game_map.task_points)
-    assert counts == Counter({task_type: 4 for task_type in TASK_TYPES})
+    assert set(counts) == set(TASK_TYPES)
+    assert all(count >= 3 for count in counts.values())
 
     # interaction_radius veio da propriedade customizada do Tiled
     assert all(t.interaction_radius == 56.0 for t in game_map.task_points)

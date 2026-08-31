@@ -10,7 +10,7 @@
   "tileheight": 64,
   "infinite": false,
   "nextlayerid": 7,
-  "nextobjectid": 89,
+  "nextobjectid": 90,
   "layers": [
     {
       "id": 1,
@@ -22,7 +22,7 @@
       "objects": [
         {
           "id": 1,
-          "name": "lab_floor",
+          "name": "mapa-42_floor",
           "x": 0,
           "y": 0,
           "width": 4480,
@@ -42,7 +42,7 @@
       "objects": [
         {
           "id": 2,
-          "name": "wall_0_0",
+          "name": "wall_0",
           "x": 0,
           "y": 0,
           "width": 4480,
@@ -59,11 +59,11 @@
         },
         {
           "id": 3,
-          "name": "wall_0_2",
+          "name": "wall_1",
           "x": 0,
           "y": 128,
-          "width": 1152,
-          "height": 64,
+          "width": 320,
+          "height": 384,
           "properties": [
             {
               "name": "collidable",
@@ -76,11 +76,11 @@
         },
         {
           "id": 4,
-          "name": "wall_0_3",
+          "name": "wall_2",
           "x": 0,
-          "y": 192,
-          "width": 192,
-          "height": 384,
+          "y": 512,
+          "width": 512,
+          "height": 448,
           "properties": [
             {
               "name": "collidable",
@@ -93,11 +93,11 @@
         },
         {
           "id": 5,
-          "name": "wall_0_9",
+          "name": "wall_3",
           "x": 0,
-          "y": 576,
-          "width": 448,
-          "height": 320,
+          "y": 960,
+          "width": 192,
+          "height": 448,
           "properties": [
             {
               "name": "collidable",
@@ -110,11 +110,11 @@
         },
         {
           "id": 6,
-          "name": "wall_0_14",
+          "name": "wall_4",
           "x": 0,
-          "y": 896,
-          "width": 256,
-          "height": 384,
+          "y": 1408,
+          "width": 320,
+          "height": 256,
           "properties": [
             {
               "name": "collidable",
@@ -127,10 +127,10 @@
         },
         {
           "id": 7,
-          "name": "wall_0_20",
+          "name": "wall_5",
           "x": 0,
-          "y": 1280,
-          "width": 448,
+          "y": 1664,
+          "width": 128,
           "height": 512,
           "properties": [
             {
@@ -144,24 +144,7 @@
         },
         {
           "id": 8,
-          "name": "wall_0_28",
-          "x": 0,
-          "y": 1792,
-          "width": 192,
-          "height": 384,
-          "properties": [
-            {
-              "name": "collidable",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 9,
-          "name": "wall_0_34",
+          "name": "wall_6",
           "x": 0,
           "y": 2176,
           "width": 4480,
@@ -177,12 +160,29 @@
           "rotation": 0
         },
         {
+          "id": 9,
+          "name": "wall_7",
+          "x": 448,
+          "y": 1408,
+          "width": 1024,
+          "height": 256,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
           "id": 10,
-          "name": "wall_10_9",
+          "name": "wall_8",
           "x": 640,
-          "y": 576,
-          "width": 1408,
-          "height": 320,
+          "y": 512,
+          "width": 832,
+          "height": 448,
           "properties": [
             {
               "name": "collidable",
@@ -195,11 +195,11 @@
         },
         {
           "id": 11,
-          "name": "wall_10_20",
-          "x": 640,
-          "y": 1280,
-          "width": 1152,
-          "height": 128,
+          "name": "wall_9",
+          "x": 704,
+          "y": 1664,
+          "width": 768,
+          "height": 64,
           "properties": [
             {
               "name": "collidable",
@@ -212,11 +212,11 @@
         },
         {
           "id": 12,
-          "name": "wall_10_22",
-          "x": 640,
-          "y": 1408,
-          "width": 1408,
-          "height": 384,
+          "name": "wall_10",
+          "x": 704,
+          "y": 1728,
+          "width": 512,
+          "height": 448,
           "properties": [
             {
               "name": "collidable",
@@ -229,10 +229,10 @@
         },
         {
           "id": 13,
-          "name": "wall_12_14",
-          "x": 768,
-          "y": 896,
-          "width": 1024,
+          "name": "wall_11",
+          "x": 832,
+          "y": 128,
+          "width": 640,
           "height": 128,
           "properties": [
             {
@@ -246,10 +246,10 @@
         },
         {
           "id": 14,
-          "name": "wall_12_19",
-          "x": 768,
-          "y": 1216,
-          "width": 1024,
+          "name": "wall_12",
+          "x": 832,
+          "y": 448,
+          "width": 640,
           "height": 64,
           "properties": [
             {
@@ -263,9 +263,9 @@
         },
         {
           "id": 15,
-          "name": "wall_13_3",
-          "x": 832,
-          "y": 192,
+          "name": "wall_13",
+          "x": 896,
+          "y": 960,
           "width": 320,
           "height": 128,
           "properties": [
@@ -280,10 +280,10 @@
         },
         {
           "id": 16,
-          "name": "wall_13_8",
-          "x": 832,
-          "y": 512,
-          "width": 1216,
+          "name": "wall_14",
+          "x": 896,
+          "y": 1280,
+          "width": 320,
           "height": 64,
           "properties": [
             {
@@ -297,10 +297,10 @@
         },
         {
           "id": 17,
-          "name": "wall_13_28",
-          "x": 832,
-          "y": 1792,
-          "width": 1280,
+          "name": "wall_15",
+          "x": 896,
+          "y": 1344,
+          "width": 576,
           "height": 64,
           "properties": [
             {
@@ -314,11 +314,11 @@
         },
         {
           "id": 18,
-          "name": "wall_13_32",
-          "x": 832,
-          "y": 2048,
-          "width": 320,
-          "height": 128,
+          "name": "wall_16",
+          "x": 1600,
+          "y": 1344,
+          "width": 960,
+          "height": 320,
           "properties": [
             {
               "name": "collidable",
@@ -331,10 +331,10 @@
         },
         {
           "id": 19,
-          "name": "wall_28_2",
-          "x": 1792,
-          "y": 128,
-          "width": 1408,
+          "name": "wall_17",
+          "x": 1600,
+          "y": 1664,
+          "width": 768,
           "height": 64,
           "properties": [
             {
@@ -348,11 +348,11 @@
         },
         {
           "id": 20,
-          "name": "wall_28_3",
-          "x": 1792,
-          "y": 192,
-          "width": 320,
-          "height": 128,
+          "name": "wall_18",
+          "x": 1664,
+          "y": 640,
+          "width": 896,
+          "height": 320,
           "properties": [
             {
               "name": "collidable",
@@ -365,10 +365,10 @@
         },
         {
           "id": 21,
-          "name": "wall_28_32",
-          "x": 1792,
-          "y": 2048,
-          "width": 320,
+          "name": "wall_19",
+          "x": 1920,
+          "y": 960,
+          "width": 384,
           "height": 128,
           "properties": [
             {
@@ -382,11 +382,11 @@
         },
         {
           "id": 22,
-          "name": "wall_35_9",
-          "x": 2240,
-          "y": 576,
-          "width": 1344,
-          "height": 320,
+          "name": "wall_20",
+          "x": 1920,
+          "y": 1280,
+          "width": 384,
+          "height": 64,
           "properties": [
             {
               "name": "collidable",
@@ -399,11 +399,11 @@
         },
         {
           "id": 23,
-          "name": "wall_35_22",
-          "x": 2240,
-          "y": 1408,
-          "width": 1344,
-          "height": 384,
+          "name": "wall_21",
+          "x": 2048,
+          "y": 128,
+          "width": 256,
+          "height": 128,
           "properties": [
             {
               "name": "collidable",
@@ -416,10 +416,10 @@
         },
         {
           "id": 24,
-          "name": "wall_42_14",
-          "x": 2688,
-          "y": 896,
-          "width": 768,
+          "name": "wall_22",
+          "x": 2048,
+          "y": 448,
+          "width": 256,
           "height": 128,
           "properties": [
             {
@@ -433,10 +433,10 @@
         },
         {
           "id": 25,
-          "name": "wall_42_19",
-          "x": 2688,
-          "y": 1216,
-          "width": 768,
+          "name": "wall_23",
+          "x": 2048,
+          "y": 576,
+          "width": 512,
           "height": 64,
           "properties": [
             {
@@ -450,77 +450,9 @@
         },
         {
           "id": 26,
-          "name": "wall_42_20",
-          "x": 2688,
-          "y": 1280,
-          "width": 896,
-          "height": 128,
-          "properties": [
-            {
-              "name": "collidable",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 27,
-          "name": "wall_43_3",
-          "x": 2752,
-          "y": 192,
-          "width": 448,
-          "height": 128,
-          "properties": [
-            {
-              "name": "collidable",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 28,
-          "name": "wall_43_8",
-          "x": 2752,
-          "y": 512,
-          "width": 832,
-          "height": 64,
-          "properties": [
-            {
-              "name": "collidable",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 29,
-          "name": "wall_43_28",
-          "x": 2752,
-          "y": 1792,
-          "width": 832,
-          "height": 64,
-          "properties": [
-            {
-              "name": "collidable",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 30,
-          "name": "wall_43_32",
-          "x": 2752,
-          "y": 2048,
+          "name": "wall_24",
+          "x": 2048,
+          "y": 1728,
           "width": 320,
           "height": 128,
           "properties": [
@@ -534,12 +466,80 @@
           "rotation": 0
         },
         {
+          "id": 27,
+          "name": "wall_25",
+          "x": 2048,
+          "y": 2048,
+          "width": 320,
+          "height": 64,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 28,
+          "name": "wall_26",
+          "x": 2048,
+          "y": 2112,
+          "width": 2432,
+          "height": 64,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 29,
+          "name": "wall_27",
+          "x": 2688,
+          "y": 1344,
+          "width": 704,
+          "height": 64,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 30,
+          "name": "wall_28",
+          "x": 2688,
+          "y": 1408,
+          "width": 1024,
+          "height": 256,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
           "id": 31,
-          "name": "wall_58_8",
-          "x": 3712,
-          "y": 512,
+          "name": "wall_29",
+          "x": 2752,
+          "y": 576,
           "width": 768,
-          "height": 384,
+          "height": 64,
           "properties": [
             {
               "name": "collidable",
@@ -552,11 +552,11 @@
         },
         {
           "id": 32,
-          "name": "wall_58_20",
-          "x": 3712,
-          "y": 1280,
-          "width": 768,
-          "height": 512,
+          "name": "wall_30",
+          "x": 2752,
+          "y": 640,
+          "width": 960,
+          "height": 256,
           "properties": [
             {
               "name": "collidable",
@@ -569,10 +569,10 @@
         },
         {
           "id": 33,
-          "name": "wall_58_28",
-          "x": 3712,
-          "y": 1792,
-          "width": 192,
+          "name": "wall_31",
+          "x": 2752,
+          "y": 896,
+          "width": 640,
           "height": 64,
           "properties": [
             {
@@ -586,11 +586,11 @@
         },
         {
           "id": 34,
-          "name": "wall_58_32",
-          "x": 3712,
-          "y": 2048,
-          "width": 192,
-          "height": 128,
+          "name": "wall_32",
+          "x": 2816,
+          "y": 1664,
+          "width": 896,
+          "height": 64,
           "properties": [
             {
               "name": "collidable",
@@ -603,10 +603,10 @@
         },
         {
           "id": 35,
-          "name": "wall_62_2",
-          "x": 3968,
-          "y": 128,
-          "width": 512,
+          "name": "wall_33",
+          "x": 2816,
+          "y": 1728,
+          "width": 704,
           "height": 384,
           "properties": [
             {
@@ -620,11 +620,11 @@
         },
         {
           "id": 36,
-          "name": "wall_64_14",
-          "x": 4096,
-          "y": 896,
-          "width": 384,
-          "height": 384,
+          "name": "wall_34",
+          "x": 2944,
+          "y": 128,
+          "width": 576,
+          "height": 192,
           "properties": [
             {
               "name": "collidable",
@@ -637,11 +637,130 @@
         },
         {
           "id": 37,
-          "name": "wall_68_28",
-          "x": 4352,
-          "y": 1792,
-          "width": 128,
+          "name": "wall_35",
+          "x": 2944,
+          "y": 512,
+          "width": 576,
+          "height": 64,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 38,
+          "name": "wall_36",
+          "x": 2944,
+          "y": 960,
+          "width": 448,
+          "height": 128,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 39,
+          "name": "wall_37",
+          "x": 2944,
+          "y": 1280,
+          "width": 448,
+          "height": 64,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 40,
+          "name": "wall_38",
+          "x": 3840,
+          "y": 640,
+          "width": 640,
+          "height": 256,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 41,
+          "name": "wall_39",
+          "x": 3840,
+          "y": 1408,
+          "width": 640,
+          "height": 320,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 42,
+          "name": "wall_40",
+          "x": 4032,
+          "y": 128,
+          "width": 448,
+          "height": 512,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 43,
+          "name": "wall_41",
+          "x": 4032,
+          "y": 1728,
+          "width": 448,
           "height": 384,
+          "properties": [
+            {
+              "name": "collidable",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 44,
+          "name": "wall_42",
+          "x": 4160,
+          "y": 896,
+          "width": 320,
+          "height": 512,
           "properties": [
             {
               "name": "collidable",
@@ -663,11 +782,11 @@
       "draworder": "topdown",
       "objects": [
         {
-          "id": 38,
+          "id": 45,
           "name": "spawn0",
           "point": true,
-          "x": 1952.0,
-          "y": 1056.0,
+          "x": 1696.0,
+          "y": 1824.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -681,11 +800,11 @@
           "height": 0
         },
         {
-          "id": 39,
+          "id": 46,
           "name": "spawn1",
           "point": true,
-          "x": 2400.0,
-          "y": 1056.0,
+          "x": 4000.0,
+          "y": 160.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -699,11 +818,11 @@
           "height": 0
         },
         {
-          "id": 40,
+          "id": 47,
           "name": "spawn2",
           "point": true,
-          "x": 1952.0,
-          "y": 1312.0,
+          "x": 352.0,
+          "y": 160.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -717,11 +836,11 @@
           "height": 0
         },
         {
-          "id": 41,
+          "id": 48,
           "name": "spawn3",
           "point": true,
-          "x": 2400.0,
-          "y": 1312.0,
+          "x": 3680.0,
+          "y": 2080.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -735,11 +854,11 @@
           "height": 0
         },
         {
-          "id": 42,
+          "id": 49,
           "name": "spawn4",
           "point": true,
-          "x": 416.0,
-          "y": 416.0,
+          "x": 2336.0,
+          "y": 224.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -753,11 +872,11 @@
           "height": 0
         },
         {
-          "id": 43,
+          "id": 50,
           "name": "spawn5",
           "point": true,
-          "x": 1440.0,
-          "y": 352.0,
+          "x": 160.0,
+          "y": 2144.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -771,11 +890,11 @@
           "height": 0
         },
         {
-          "id": 44,
+          "id": 51,
           "name": "spawn6",
           "point": true,
-          "x": 2464.0,
-          "y": 416.0,
+          "x": 2784.0,
+          "y": 1312.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -789,11 +908,11 @@
           "height": 0
         },
         {
-          "id": 45,
+          "id": 52,
           "name": "spawn7",
           "point": true,
-          "x": 480.0,
-          "y": 2016.0,
+          "x": 800.0,
+          "y": 1184.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -807,11 +926,11 @@
           "height": 0
         },
         {
-          "id": 46,
+          "id": 53,
           "name": "spawn8",
           "point": true,
-          "x": 2336.0,
-          "y": 2016.0,
+          "x": 4128.0,
+          "y": 1184.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -825,11 +944,11 @@
           "height": 0
         },
         {
-          "id": 47,
+          "id": 54,
           "name": "spawn9",
           "point": true,
-          "x": 3616.0,
-          "y": 352.0,
+          "x": 1504.0,
+          "y": 608.0,
           "properties": [
             {
               "name": "spawn_id",
@@ -853,172 +972,11 @@
       "draworder": "topdown",
       "objects": [
         {
-          "id": 48,
+          "id": 55,
           "name": "task1",
           "point": true,
-          "x": 288.0,
-          "y": 288.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "wires"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 49,
-          "name": "task2",
-          "point": true,
-          "x": 672.0,
-          "y": 288.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "fix_wiring"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 50,
-          "name": "task3",
-          "point": true,
-          "x": 1248.0,
+          "x": 544.0,
           "y": 224.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "swipe_card"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 51,
-          "name": "task4",
-          "point": true,
-          "x": 1632.0,
-          "y": 224.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "calibrate"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 52,
-          "name": "task5",
-          "point": true,
-          "x": 2208.0,
-          "y": 480.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "clean_filter"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 53,
-          "name": "task6",
-          "point": true,
-          "x": 2656.0,
-          "y": 288.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "start_reactor"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 54,
-          "name": "task7",
-          "point": true,
-          "x": 288.0,
-          "y": 1888.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "asteroids"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 55,
-          "name": "task8",
-          "point": true,
-          "x": 736.0,
-          "y": 2080.0,
           "properties": [
             {
               "name": "task_type",
@@ -1038,10 +996,10 @@
         },
         {
           "id": 56,
-          "name": "task9",
+          "name": "task2",
           "point": true,
-          "x": 1248.0,
-          "y": 1952.0,
+          "x": 416.0,
+          "y": 288.0,
           "properties": [
             {
               "name": "task_type",
@@ -1061,10 +1019,10 @@
         },
         {
           "id": 57,
-          "name": "task10",
+          "name": "task3",
           "point": true,
-          "x": 2656.0,
-          "y": 2080.0,
+          "x": 1952.0,
+          "y": 544.0,
           "properties": [
             {
               "name": "task_type",
@@ -1084,10 +1042,10 @@
         },
         {
           "id": 58,
-          "name": "task11",
+          "name": "task4",
           "point": true,
-          "x": 3168.0,
-          "y": 1952.0,
+          "x": 1952.0,
+          "y": 352.0,
           "properties": [
             {
               "name": "task_type",
@@ -1107,170 +1065,9 @@
         },
         {
           "id": 59,
-          "name": "task12",
+          "name": "task5",
           "point": true,
-          "x": 3296.0,
-          "y": 224.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "clean_filter"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 60,
-          "name": "task13",
-          "point": true,
-          "x": 4000.0,
-          "y": 1888.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "start_reactor"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 61,
-          "name": "task14",
-          "point": true,
-          "x": 3552.0,
-          "y": 992.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "asteroids"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 62,
-          "name": "task15",
-          "point": true,
-          "x": 416.0,
-          "y": 1056.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "wires"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 63,
-          "name": "task16",
-          "point": true,
-          "x": 672.0,
-          "y": 1184.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "fix_wiring"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 64,
-          "name": "task17",
-          "point": true,
-          "x": 3936.0,
-          "y": 1056.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "swipe_card"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 65,
-          "name": "task18",
-          "point": true,
-          "x": 1696.0,
-          "y": 2080.0,
-          "properties": [
-            {
-              "name": "task_type",
-              "type": "string",
-              "value": "calibrate"
-            },
-            {
-              "name": "interaction_radius",
-              "type": "float",
-              "value": 56.0
-            }
-          ],
-          "visible": true,
-          "rotation": 0,
-          "width": 0,
-          "height": 0
-        },
-        {
-          "id": 66,
-          "name": "task19",
-          "point": true,
-          "x": 3872.0,
+          "x": 2656.0,
           "y": 288.0,
           "properties": [
             {
@@ -1290,10 +1087,10 @@
           "height": 0
         },
         {
-          "id": 67,
-          "name": "task20",
+          "id": 60,
+          "name": "task6",
           "point": true,
-          "x": 3424.0,
+          "x": 2848.0,
           "y": 480.0,
           "properties": [
             {
@@ -1313,11 +1110,172 @@
           "height": 0
         },
         {
-          "id": 68,
-          "name": "task21",
+          "id": 61,
+          "name": "task7",
           "point": true,
-          "x": 3616.0,
-          "y": 2016.0,
+          "x": 3680.0,
+          "y": 544.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "asteroids"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 62,
+          "name": "task8",
+          "point": true,
+          "x": 3808.0,
+          "y": 480.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "wires"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 63,
+          "name": "task9",
+          "point": true,
+          "x": 672.0,
+          "y": 1312.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "fix_wiring"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 64,
+          "name": "task10",
+          "point": true,
+          "x": 416.0,
+          "y": 1248.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "swipe_card"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 65,
+          "name": "task11",
+          "point": true,
+          "x": 1312.0,
+          "y": 1120.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "calibrate"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 66,
+          "name": "task12",
+          "point": true,
+          "x": 1760.0,
+          "y": 1184.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "clean_filter"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 67,
+          "name": "task13",
+          "point": true,
+          "x": 4000.0,
+          "y": 1312.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "start_reactor"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 68,
+          "name": "task14",
+          "point": true,
+          "x": 3680.0,
+          "y": 1120.0,
           "properties": [
             {
               "name": "task_type",
@@ -1337,10 +1295,10 @@
         },
         {
           "id": 69,
-          "name": "task22",
+          "name": "task15",
           "point": true,
-          "x": 2208.0,
-          "y": 1888.0,
+          "x": 480.0,
+          "y": 1952.0,
           "properties": [
             {
               "name": "task_type",
@@ -1360,10 +1318,10 @@
         },
         {
           "id": 70,
-          "name": "task23",
+          "name": "task16",
           "point": true,
-          "x": 608.0,
-          "y": 1824.0,
+          "x": 544.0,
+          "y": 1760.0,
           "properties": [
             {
               "name": "task_type",
@@ -1383,10 +1341,10 @@
         },
         {
           "id": 71,
-          "name": "task24",
+          "name": "task17",
           "point": true,
-          "x": 800.0,
-          "y": 1888.0,
+          "x": 1376.0,
+          "y": 1952.0,
           "properties": [
             {
               "name": "task_type",
@@ -1406,9 +1364,9 @@
         },
         {
           "id": 72,
-          "name": "task25",
+          "name": "task18",
           "point": true,
-          "x": 4128.0,
+          "x": 1824.0,
           "y": 2080.0,
           "properties": [
             {
@@ -1429,10 +1387,10 @@
         },
         {
           "id": 73,
-          "name": "task26",
+          "name": "task19",
           "point": true,
-          "x": 3936.0,
-          "y": 2144.0,
+          "x": 2720.0,
+          "y": 1824.0,
           "properties": [
             {
               "name": "task_type",
@@ -1452,10 +1410,10 @@
         },
         {
           "id": 74,
-          "name": "task27",
+          "name": "task20",
           "point": true,
           "x": 2464.0,
-          "y": 544.0,
+          "y": 2016.0,
           "properties": [
             {
               "name": "task_type",
@@ -1475,15 +1433,38 @@
         },
         {
           "id": 75,
-          "name": "task28",
+          "name": "task21",
           "point": true,
-          "x": 2144.0,
-          "y": 352.0,
+          "x": 3872.0,
+          "y": 2016.0,
           "properties": [
             {
               "name": "task_type",
               "type": "string",
               "value": "asteroids"
+            },
+            {
+              "name": "interaction_radius",
+              "type": "float",
+              "value": 56.0
+            }
+          ],
+          "visible": true,
+          "rotation": 0,
+          "width": 0,
+          "height": 0
+        },
+        {
+          "id": 76,
+          "name": "task22",
+          "point": true,
+          "x": 3680.0,
+          "y": 1888.0,
+          "properties": [
+            {
+              "name": "task_type",
+              "type": "string",
+              "value": "wires"
             },
             {
               "name": "interaction_radius",
@@ -1507,11 +1488,11 @@
       "draworder": "topdown",
       "objects": [
         {
-          "id": 76,
+          "id": 77,
           "name": "meeting_button",
           "point": true,
-          "x": 2208.0,
-          "y": 1120.0,
+          "x": 2656.0,
+          "y": 1184.0,
           "properties": [
             {
               "name": "interaction_radius",
@@ -1535,80 +1516,70 @@
       "draworder": "topdown",
       "objects": [
         {
-          "id": 77,
-          "name": "medbay",
-          "x": 192,
-          "y": 192,
-          "width": 640,
-          "height": 384,
-          "visible": true,
-          "rotation": 0
-        },
-        {
           "id": 78,
-          "name": "laboratorio",
-          "x": 1152,
-          "y": 128,
-          "width": 640,
-          "height": 320,
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 79,
-          "name": "eletrica",
-          "x": 2112,
-          "y": 192,
-          "width": 640,
-          "height": 384,
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 80,
           "name": "navegacao",
-          "x": 3200,
+          "x": 320,
           "y": 128,
-          "width": 768,
-          "height": 384,
-          "visible": true,
-          "rotation": 0
-        },
-        {
-          "id": 81,
-          "name": "seguranca",
-          "x": 256,
-          "y": 896,
           "width": 512,
           "height": 384,
           "visible": true,
           "rotation": 0
         },
         {
-          "id": 82,
-          "name": "hub",
-          "x": 1792,
-          "y": 896,
-          "width": 896,
+          "id": 79,
+          "name": "reator",
+          "x": 1472,
+          "y": 128,
+          "width": 576,
           "height": 512,
           "visible": true,
           "rotation": 0
         },
         {
-          "id": 83,
-          "name": "oxigenio",
-          "x": 3456,
-          "y": 896,
+          "id": 80,
+          "name": "eletrica",
+          "x": 2304,
+          "y": 128,
           "width": 640,
+          "height": 448,
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 81,
+          "name": "hub",
+          "x": 3520,
+          "y": 128,
+          "width": 512,
+          "height": 512,
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 82,
+          "name": "medbay",
+          "x": 192,
+          "y": 960,
+          "width": 704,
+          "height": 448,
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 83,
+          "name": "comunicacao",
+          "x": 1216,
+          "y": 960,
+          "width": 704,
           "height": 384,
           "visible": true,
           "rotation": 0
         },
         {
           "id": 84,
-          "name": "reator",
-          "x": 192,
-          "y": 1792,
+          "name": "seguranca",
+          "x": 2304,
+          "y": 960,
           "width": 640,
           "height": 384,
           "visible": true,
@@ -1616,40 +1587,50 @@
         },
         {
           "id": 85,
-          "name": "analise",
-          "x": 1152,
-          "y": 1856,
-          "width": 640,
-          "height": 320,
+          "name": "armazem",
+          "x": 3392,
+          "y": 896,
+          "width": 768,
+          "height": 512,
           "visible": true,
           "rotation": 0
         },
         {
           "id": 86,
-          "name": "armazem",
-          "x": 2112,
-          "y": 1792,
-          "width": 640,
-          "height": 384,
+          "name": "motores",
+          "x": 128,
+          "y": 1664,
+          "width": 576,
+          "height": 512,
           "visible": true,
           "rotation": 0
         },
         {
           "id": 87,
-          "name": "motores",
-          "x": 3072,
-          "y": 1856,
-          "width": 640,
-          "height": 320,
+          "name": "analise",
+          "x": 1216,
+          "y": 1728,
+          "width": 832,
+          "height": 448,
           "visible": true,
           "rotation": 0
         },
         {
           "id": 88,
-          "name": "comunicacao",
-          "x": 3904,
-          "y": 1792,
+          "name": "oxigenio",
+          "x": 2368,
+          "y": 1664,
           "width": 448,
+          "height": 448,
+          "visible": true,
+          "rotation": 0
+        },
+        {
+          "id": 89,
+          "name": "laboratorio",
+          "x": 3520,
+          "y": 1728,
+          "width": 512,
           "height": 384,
           "visible": true,
           "rotation": 0
