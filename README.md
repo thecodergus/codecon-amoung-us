@@ -69,12 +69,22 @@ uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 \
 ## Jogar em rede (LAN)
 
 **Descoberta automática.** O host anuncia a partida via UDP broadcast
-(porta 5557) enquanto está no lobby; quem está na mesma rede abre
-Entrar em partida → Buscar partidas na rede e entra com um clique, sem
-saber IP nem porta. A lista mostra apelido do host, IP e vagas. O campo
+(porta 5557) enquanto está no lobby — para o broadcast global
+(`255.255.255.255`) **e** para o dirigido à sub-rede (ex.: `192.168.1.255`),
+pois filtros de AP/roteador derrubam um e passam o outro. Quem está na mesma
+rede abre Entrar em partida → Buscar partidas na rede e entra com um clique,
+sem saber IP nem porta. A lista mostra apelido do host, IP e vagas. O campo
 manual continua disponível como fallback (ex.: broadcast bloqueado pelo
 roteador). O lobby do host exibe o IP local e as portas para compartilhar
 manualmente se preciso.
+
+**Correção de permissões em um clique.** Se o firewall do próprio host
+bloquear a escuta (bind), a tela de criar partida oferece
+"Corrigir permissões de rede (requer admin)": no Windows cria a regra inbound
+para o executável do jogo via `netsh advfirewall` com elevação UAC (opt-in —
+só roda no clique); no Linux exibe o comando pronto
+(`sudo ufw allow <porta>/tcp && sudo ufw allow 5557/udp`). A busca vazia e os
+erros de conexão também exibem diagnóstico orientado por sistema.
 
 **Transporte WebSocket (padrão ouro) e TCP (fallback).** O servidor escuta
 TCP cru e WebSocket simultaneamente; o cliente tenta WebSocket primeiro e
