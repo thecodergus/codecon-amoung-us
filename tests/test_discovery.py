@@ -19,9 +19,11 @@ from codecon_amoung_us.net.discovery import (
     DiscoveredGame,
     DiscoveryBeacon,
     GameAnnouncement,
+    _subnet_broadcast,
     decode_announcement,
     discover_games,
     encode_announcement,
+    local_broadcast_addresses,
 )
 from codecon_amoung_us.net.server import GameServer
 
@@ -199,3 +201,41 @@ def test_server_without_announce_does_not_advertise() -> None:
         time.sleep(0.2)
         games = discover_games(timeout=2.5)
         assert [g for g in games if g.tcp_port == server.port] == []
+
+
+# ---------------------------------------------------------------- broadcast dual
+
+
+def test_subnet_broadcast_ipv4() -> None:
+    assert _subnet_broadcast("192.168.1.42") == "192.168.1.255"
+    assert _subnet_broadcast("10.0.0.1") == "10.0.0.255"
+
+
+def test_subnet_broadcast_rejects_invalid() -> None:
+    assert _subnet_broadcast("nao-e-ip") is None
+    assert _subnet_broadcast("1.2.3") is None
+    assert _subnet_broadcast("1.2.3.4.5") is None
+    assert _subnet_broadcast("1.2.3.256") is None
+
+
+def test_local_broadcast_addresses_starts_global_and_deduplicates() -> None:
+    addresses = local_broadcast_addresses()
+    assert addresses[0] == "255.255.255.255"
+    assert len(addresses) == len(set(addresses))
+
+
+@pytest.mark.integration
+def test_beacon_reaches_listener_via_implicit_dual_broadcast() -> None:
+    """Beacon sem broadcast_addr explícito (dual) alcança o listener local."""
+    port = _free_udp_port()
+    beacon = DiscoveryBeacon(
+        lambda: _announcement(host_name="davi", tcp_port=8888),
+        port=port,
+        interval_seconds=0.1,
+    )
+    beacon.start()
+    try:
+        games = discover_games(timeout=1.0, port=port)
+    finally:
+        beacon.stop()
+    assert [(g.host_name, g.tcp_port) for g in games] == [("davi", 8888)]

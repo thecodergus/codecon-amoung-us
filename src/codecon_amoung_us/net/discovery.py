@@ -5,6 +5,11 @@ cliente escuta passivamente por alguns segundos e monta a lista. Broadcast
 direto em vez de mDNS/multicast: multicast é frequentemente dropado por
 roteadores/APs corporativos e de evento, e o beacon cabe na stdlib.
 
+O beacon envia para todas as formas de broadcast disponíveis (global
+``255.255.255.255`` e o dirigido à sub-rede, ex.: ``192.168.1.255``): filtros
+de AP/roteador derrubam um e passam o outro — enviar para ambos maximiza a
+descoberta sem dependência nova.
+
 Limitação conhecida: Wi-Fi com "client isolation" bloqueia TODO tráfego
 ponto-a-ponto — nem o beacon nem a conexão direta funcionam; o campo de IP
 manual continua sendo o fallback nesse cenário.
@@ -37,9 +42,53 @@ __all__ = [
     "encode_announcement",
     "decode_announcement",
     "discover_games",
+    "local_broadcast_addresses",
 ]
 
 _BROADCAST_ADDR = "255.255.255.255"
+# Endereço TEST-NET-1 (RFC 5737): ``connect`` UDP não gera tráfego; serve só
+# para descobrir o IP local da rota padrão via ``getsockname()``.
+_ROUTE_PROBE = ("192.0.2.1", 80)
+
+
+def _local_ip() -> str | None:
+    """IP local da rota padrão (sem tráfego); ``None`` se indisponível."""
+    with contextlib.suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.connect(_ROUTE_PROBE)
+        return str(sock.getsockname()[0])
+    return None
+
+
+def _subnet_broadcast(local_ip: str) -> str | None:
+    """Broadcast dirigido da sub-rede (último octeto ``.255``, /24 assumido).
+
+    A maior parte das LANs domésticas/de evento usa /24; um candidato errado
+    só não recebe nada (falha de envio é suprimida), nunca quebra a descoberta.
+    """
+    octets = local_ip.split(".")
+    if len(octets) != 4:
+        return None
+    try:
+        values = [int(octet) for octet in octets]
+    except ValueError:
+        return None
+    if any(value < 0 or value > 255 for value in values):
+        return None
+    return f"{values[0]}.{values[1]}.{values[2]}.255"
+
+
+def local_broadcast_addresses() -> list[str]:
+    """Todos os destinos de anúncio: broadcast global + dirigido à sub-rede.
+
+    Deduplicado, preservando o global primeiro (sempre tentado).
+    """
+    addresses = [_BROADCAST_ADDR]
+    local_ip = _local_ip()
+    if local_ip is not None:
+        subnet = _subnet_broadcast(local_ip)
+        if subnet is not None:
+            addresses.append(subnet)
+    return list(dict.fromkeys(addresses))
 
 
 class GameAnnouncement(msgspec.Struct, forbid_unknown_fields=True, kw_only=True):
@@ -105,12 +154,18 @@ class DiscoveryBeacon:
         *,
         port: int = DISCOVERY_PORT,
         interval_seconds: float = DISCOVERY_BEACON_INTERVAL_SECONDS,
-        broadcast_addr: str = _BROADCAST_ADDR,
+        broadcast_addr: str | None = None,
     ) -> None:
+        """``broadcast_addr=None`` usa todos os destinos de broadcast locais.
+
+        Um valor explícito restringe o envio a um único endereço (testes).
+        """
         self._make_announcement = make_announcement
         self._port = port
         self._interval = interval_seconds
-        self._broadcast_addr = broadcast_addr
+        self._broadcast_addrs = (
+            local_broadcast_addresses() if broadcast_addr is None else [broadcast_addr]
+        )
         self._stop = threading.Event()
         self._sock: socket.socket | None = None
         self._thread: threading.Thread | None = None
@@ -143,9 +198,11 @@ class DiscoveryBeacon:
             try:
                 announcement = self._make_announcement()
                 if announcement is not None:
-                    sock.sendto(
-                        encode_announcement(announcement), (self._broadcast_addr, self._port)
-                    )
+                    payload = encode_announcement(announcement)
+                    for address in self._broadcast_addrs:
+                        with contextlib.suppress(OSError):
+                            # destino indisponível (ex.: filtro de AP) — segue nos demais
+                            sock.sendto(payload, (address, self._port))
             except OSError:
                 pass  # rede transitória (interface caiu, etc.) — tenta no próximo ciclo
             self._stop.wait(self._interval)
