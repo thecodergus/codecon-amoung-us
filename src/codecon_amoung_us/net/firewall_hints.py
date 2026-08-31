@@ -1,9 +1,10 @@
 """Dicas de diagnóstico para falhas de rede ligadas a firewall de host.
 
 Firewalls bloqueiam conexões de entrada por padrão (Microsoft Learn: o bind
-em modo listen exige regra inbound explícita) e o prompt do Windows pode ser
-descartado pelo usuário. As mensagens são orientadas por SO e nunca sobem
-exceção: são texto para a UI, não tratamento de erro.
+em modo listen exige regra inbound explícita). Restrição do público-alvo:
+os usuários NUNCA têm admin/sudo — as dicas nunca mandam elevar privilégios;
+apontam para o que se resolve sem admin (aceitar o alerta do Windows, porta
+efêmera, descoberta) ou para o que só o administrador da rede pode fazer.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ __all__ = [
 ]
 
 _BIND_PERMISSION_ERRNOS = frozenset({errno.EACCES, errno.EPERM})
-# WSAEACCES: bind/listen negado no Windows (firewall ou porta privilegiada).
+# WSAEACCES: bind/listen negado no Windows (firewall ou porta reservada).
 _WINERROR_ACCESS_DENIED = 10013
 
 
@@ -32,13 +33,14 @@ def hint_for_bind_error(exc: OSError) -> str | None:
         return None
     if sys.platform == "win32":
         return (
-            "O Windows pode estar bloqueando o jogo: use 'Corrigir permissões "
-            "de rede' na tela de criar partida (ou permita o Python no "
-            "Windows Defender Firewall)."
+            "Firewall do Windows bloqueou a escuta: se aparecer o alerta de "
+            "segurança, clique em 'Permitir acesso' (não precisa de "
+            "administrador). Sem o alerta, só o administrador da máquina "
+            "pode liberar."
         )
     return (
-        "O firewall do sistema pode estar bloqueando a porta: libere com "
-        "'sudo ufw allow <porta>' (ou equivalente da sua distro)."
+        "Firewall do sistema bloqueou a porta: liberar exige o administrador "
+        "(sudo). Alternativa sem admin: rodar em rede sem firewall de host."
     )
 
 
@@ -46,7 +48,7 @@ def discovery_empty_tips() -> tuple[str, ...]:
     """Dicas exibidas quando a busca de partidas não encontra nada."""
     return (
         "Confira se o host criou a partida na mesma rede.",
-        "Firewall do host pode estar bloqueando a descoberta — no menu de "
-        "criar partida, use 'Corrigir permissões de rede'.",
+        "Firewall do host pode estar bloqueando a descoberta — no Windows, "
+        "aceite o alerta 'Permitir acesso' na primeira escuta.",
         "Em Wi-Fi com isolamento de clientes, só a conexão manual por IP funciona.",
     )

@@ -30,7 +30,6 @@ from ..map.model import GameMap
 from ..map.scene import render_scene
 from ..net.client import GameClient
 from ..net.discovery import DiscoveredGame, discover_games
-from ..net.firewall_fix import run_network_fix
 from ..net.firewall_hints import discovery_empty_tips, hint_for_bind_error
 from ..net.server import GameServer
 from ..protocol import (
@@ -367,7 +366,6 @@ class App:
             "A partida aparece automaticamente na busca da rede.",
             font_color=COLOR_TEXT_DIM,
         )
-        menu.add.button("Corrigir permissões de rede (requer admin)", self._run_network_fix)
         menu.add.button("Iniciar servidor", self._create_game)
         menu.add.button("Voltar", self._back_to_main)
         return menu
@@ -501,18 +499,6 @@ class App:
         self.screen_name = Screen.ERROR
 
     # ------------------------------------------------------------------ conexão
-
-    def _run_network_fix(self) -> None:
-        """Correção de firewall em um clique (opt-in): UAC no Windows; comando manual fora."""
-        try:
-            port = int(str(self.port_input.get_value()) or "5555")
-        except ValueError:
-            port = 5555
-        result = run_network_fix(port)
-        if result.success:
-            self._push_toast(result.message)
-        else:
-            self._show_error(result.message)
 
     def _create_game(self) -> None:
         nickname = str(self.nickname_input.get_value()).strip() or "host"
