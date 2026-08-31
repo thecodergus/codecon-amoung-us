@@ -63,7 +63,7 @@ from .discovery import DiscoveryBeacon, GameAnnouncement
 from .dispatch import dispatch_ejection
 from .ws import WSClientConnection, WSListener
 
-__all__ = ["GameServer", "main"]
+__all__ = ["GameServer", "start_host_server", "main"]
 
 # fila de comandos -> (conexão, mensagem); None em broadcast de saída
 _Command = tuple["Connection", Message]
@@ -1078,6 +1078,38 @@ def _server_config(args: argparse.Namespace) -> GameConfig:
     if args.seed is not None:
         config = dataclasses.replace(config, map_seed=args.seed)
     return config
+
+
+def start_host_server(tcp_port: int, ws_port: int | None) -> GameServer:
+    """Sobe o servidor embutido do host com cascata de portas (sem admin).
+
+    Restrição do público-alvo: usuários nunca têm admin/sudo — falha de bind
+    não pode ser "corrigida" por elevação. Como a descoberta LAN anuncia a
+    porta real, a porta pedida é prescindível:
+
+    1. ``(tcp_port, ws_port)`` — escolha do usuário;
+    2. ``(tcp_port, sem WS)`` — porta WS adjacente ocupada/bloqueada;
+    3. ``(efêmera, sem WS)`` — porta do usuário reservada/bloqueada; o
+       anúncio de descoberta divulga a porta efetiva e nada muda para os
+       clientes da lista de salas.
+
+    Bind em ``0.0.0.0``: partidas em LAN (mesma rede) dependem de aceitar
+    conexões de outros hosts. Levanta o último erro se tudo falhar (o UI
+    worker captura ``OSError``; ``OverflowError`` cobre porta > 65535).
+    """
+    last_error: OSError | OverflowError | None = None
+    for port, ws in ((tcp_port, ws_port), (tcp_port, None), (0, None)):
+        config = GameConfig(ws_port=ws) if ws is not None else GameConfig()
+        candidate = GameServer(host="0.0.0.0", port=port, config=config)
+        try:
+            candidate.start()
+        except (OSError, OverflowError) as exc:
+            last_error = exc
+            candidate.stop()
+        else:
+            return candidate
+    assert last_error is not None  # o loop tem ao menos uma tentativa
+    raise last_error
 
 
 def main(argv: list[str] | None = None) -> None:

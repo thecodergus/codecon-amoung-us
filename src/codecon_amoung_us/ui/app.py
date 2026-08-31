@@ -31,7 +31,7 @@ from ..map.scene import render_scene
 from ..net.client import GameClient
 from ..net.discovery import DiscoveredGame, discover_games
 from ..net.firewall_hints import discovery_empty_tips, hint_for_bind_error
-from ..net.server import GameServer
+from ..net.server import GameServer, start_host_server
 from ..protocol import (
     ActionAccepted,
     ActionDenied,
@@ -580,21 +580,11 @@ class App:
         client = GameClient()
         try:
             if host:
-                config = GameConfig(ws_port=ws_port) if ws_port is not None else GameConfig()
-                # Bind em todas as interfaces: partidas em LAN (mesma rede)
-                # dependem de aceitar conexões de outros hosts; o cliente
-                # local continua conectando em 127.0.0.1.
-                server = GameServer(host="0.0.0.0", port=tcp_port, config=config)
-                try:
-                    server.start()
-                except OSError:
-                    if ws_port is None:
-                        raise
-                    # Porta WS adjacente ocupada: sobe só com TCP (fallback)
-                    # em vez de derrubar a criação da partida.
-                    server.stop()
-                    server = GameServer(host="0.0.0.0", port=tcp_port)
-                    server.start()
+                # Cascata de portas (ver net.server.start_host_server): a
+                # descoberta anuncia a porta efetiva, então bind negado/ocupado
+                # não derruba a criação da partida. O cliente local conecta em
+                # 127.0.0.1 na porta efetiva.
+                server = start_host_server(tcp_port, ws_port)
                 tcp_port = server.port
                 ws_port = server.ws_port  # efetivo (None se o fallback desligou o WS)
                 ip = "127.0.0.1"
