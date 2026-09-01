@@ -51,4 +51,6 @@ def discovery_empty_tips() -> tuple[str, ...]:
         "Firewall do host pode estar bloqueando a descoberta — no Windows, "
         "aceite o alerta 'Permitir acesso' na primeira escuta.",
         "Em Wi-Fi com isolamento de clientes, só a conexão manual por IP funciona.",
+        "A busca já inclui varredura unicast da sub-rede; redes corporativas "
+        "segmentadas por VLAN exigem que host e jogadores estejam no mesmo segmento.",
     )

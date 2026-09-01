@@ -76,23 +76,26 @@ rede abre Entrar em partida → Buscar partidas na rede e entra com um clique,
 sem saber IP nem porta. A lista mostra apelido do host, IP e vagas. O campo
 manual continua disponível como fallback (ex.: broadcast bloqueado pelo
 roteador). O lobby do host exibe o IP local e as portas para compartilhar
-manualmente se preciso.
+manualmente se preciso. Se o broadcast não atravessar (VLAN/AP corporativo
+filtra broadcast mas passa unicast), a busca cai automaticamente para
+**varredura unicast da sub-rede** (/24, pacing ~20 pacotes/s) — o host
+responde os probes com o mesmo anúncio.
 
-**Sem admin/sudo (restrição do público-alvo).** As portas padrão
-(5555/5556/5557) são não privilegiadas e o jogo nunca exige elevação. Se a
-porta pedida estiver ocupada/reservada ou o bind for negado, o host sobe
-automaticamente em porta efêmera (`start_host_server`) — a descoberta
-anuncia a porta real e a lista de salas funciona igual, sem reconfiguração.
-No Windows, o alerta de firewall da primeira escuta ("Permitir acesso") não
-requer administrador — aceite-o. Sem o alerta (descartado antes) ou com
-firewall de rede, liberar portas depende do administrador; a busca vazia e
-os erros de conexão exibem diagnóstico orientado por sistema.
+**Correção de permissões em um clique.** Se o firewall do próprio host
+bloquear a escuta (bind), a tela de criar partida oferece
+"Corrigir permissões de rede (requer admin)": no Windows cria a regra inbound
+para o executável do jogo via `netsh advfirewall` com elevação UAC (opt-in —
+só roda no clique); no Linux exibe o comando pronto
+(`sudo ufw allow <porta>/tcp && sudo ufw allow 5557/udp`). A busca vazia e os
+erros de conexão também exibem diagnóstico orientado por sistema.
 
-**Transporte WebSocket (padrão ouro) e TCP (fallback).** O servidor escuta
-TCP cru e WebSocket simultaneamente; o cliente tenta WebSocket primeiro e
-cai para TCP transparentemente. O protocolo do jogo é idêntico nos dois —
-o WS só embrulha os frames. O host embutido sobe o WS na porta adjacente
-(TCP 5555 → WS 5556); o standalone usa `--ws-port`:
+**Transporte: cascata `wss` → `ws` → HTTP → TCP.** O servidor escuta TCP cru,
+WebSocket e HTTP long polling simultaneamente; o cliente tenta o melhor
+transporte e cai para o seguinte transparentemente. O protocolo do jogo é
+idêntico nos quatro — só embrulham os frames. O host embutido sobe o WS na
+porta adjacente e o HTTP na seguinte (TCP 5555 → WS 5556 → HTTP 5557; a
+descoberta usa **UDP** 5557, protocolo distinto — sem conflito); o
+standalone usa `--ws-port`:
 
 ```bash
 uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 --ws-port 5556
@@ -109,6 +112,23 @@ sudo setcap 'cap_net_bind_service=+ep' "$(readlink -f .venv/bin/python)"
 uv run codecon-amoung-us-server --host 0.0.0.0 --port 5555 --ws-port 80
 ```
 
+**`wss://` com certificado self-signed (pin via beacon).** Firewalls com
+inspeção de conteúdo removem o `Upgrade` do `ws://` em claro, mas não
+enxergam dentro do túnel TLS — para eles, `wss://` é HTTPS na 443. O host
+gera um certificado self-signed em memória a cada boot (sem admin, sem
+domínio) e o anúncio de descoberta carrega o **fingerprint SHA-256** do
+cert; o cliente só aceita o certificado cujo fingerprint coincide (pin).
+O pin é tão confiável quanto o beacon (descoberta não autenticada): o TLS
+compra **sigilo contra inspeção passiva** e atravessabilidade, não
+autenticação do host.
+
+**HTTP long polling (modo compatibilidade).** Último degrau para proxies
+corporativos que removem qualquer Upgrade: downstream em `GET /poll` (o
+servidor segura a resposta até ~25 s — long polling, sem polling cego) e
+upstream em `POST /send`, tudo HTTP puro com os mesmos frames JSON Lines.
+Latência maior que ws/TCP: jogável, não competitivo. Sessões expiram por
+inatividade (~60 s).
+
 > **Amplitude do setcap:** o `readlink -f` resolve ao interpretador Python
 > real — a capability passa a valer para **todo** processo executado com
 > aquele binário, não só para o jogo. Alternativas: aplicar o setcap numa
@@ -121,17 +141,37 @@ Caveats honestos:
 - O firewall do **próprio host** ainda pode exigir autorização (um clique
   na primeira escuta) — porta 80 não dispensa isso; o ganho é contra
   firewalls de **rede** entre segmentos e contra proxies.
-- Proxies corporativos com inspeção de conteúdo podem remover o Upgrade de
-  `ws://` (sem TLS). `wss://` exigiria certificado confiável (domínio +
-  Let's Encrypt) e está fora do escopo LAN.
+- Proxies corporativos com inspeção de conteúdo removem o `Upgrade` de
+  `ws://` (sem TLS) — por isso a cascata inclui `wss://` (self-signed +
+  pin) e, em último caso, HTTP long polling, que atravessa proxies que
+  só deixam passar HTTP simples.
 - Wi-Fi de evento/empresa com **isolamento de clientes** bloqueia TODO
-  tráfego entre máquinas: nem a descoberta nem a conexão por IP funcionam.
-  Nesse cenário, só um relay público resolveria (fora de escopo).
+  tráfego ponto-a-ponto entre máquinas: nem a descoberta (broadcast ou
+  sweep), nem a conexão por IP funcionam. Nesse cenário, a saída prática
+  é uma VPN mesh (abaixo) ou um relay público (fora de escopo).
 - **Descoberta não autenticada:** qualquer host na LAN pode anunciar
   partidas no broadcast — confira apelido e IP antes de entrar.
 - **Servidor sem autenticação:** qualquer um que alcance a porta entra no
   lobby, e o host escuta em todas as interfaces (`0.0.0.0`). Use em redes
   confiáveis (LAN de evento, não Wi-Fi público aberto).
+
+### Último recurso: VPN mesh sem admin (Tailscale userspace)
+
+Quando a rede corporativa bloqueia tudo (isolamento de clientes,
+segmentação rígida), o jogo em si não tem contorno legítimo — o tráfego
+precisa sair pela internet. O **Tailscale** em modo userspace roda **sem
+admin** e cria uma rede virtual entre os jogadores (coordenação via
+contas gratuitas; tráfego P2P via WireGuard ou relay DERP):
+
+- Windows: build userspace/oficial sem elevação
+  (`github.com/tailscale/tailscale/issues/2791`);
+- Linux: `tailscaled` userspace + proxy SOCKS5 local
+  (`tailscale.com/docs/concepts/userspace-networking`).
+
+Instalação e contas são responsabilidade dos jogadores, sujeitas à política
+da empresa — **fora do escopo de suporte do jogo**. Uma vez na rede
+virtual, conecte pelo IP do Tailscale (100.x.y.z) no campo manual. O
+ZeroTier foi descartado: exige adapter de rede (admin).
 
 ## Controles (tela de jogo)
 
