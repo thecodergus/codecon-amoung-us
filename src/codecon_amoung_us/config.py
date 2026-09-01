@@ -33,6 +33,10 @@ DISCOVERY_SWEEP_PPS: int = 20
 # servidor e expiração de sessão por inatividade.
 HTTP_POLL_HOLD_SECONDS: float = 25.0
 HTTP_POLL_SESSION_TIMEOUT_SECONDS: float = 60.0
+# Endurecimento contra peer hostil na LAN (frames do protocolo são pequenos):
+# teto de corpo do POST /send e de sessões simultâneas.
+HTTP_POLL_MAX_BODY_BYTES: int = 64 * 1024
+HTTP_POLL_MAX_SESSIONS: int = 64
 
 # Raios de interação (px) — fonte única para servidor e UI.
 KILL_RADIUS: float = 40.0
@@ -116,10 +120,6 @@ class GameConfig:
     min_players_to_start: int = 1
     impostor_count: int = 1
     map_path: Path | None = None
-    # Seed fixa do gerador procedural de mapas (testes/demo reproduzível);
-    # None = seed aleatória sorteada a cada partida. Ignorada quando
-    # ``map_path`` aponta para um asset Tiled customizado.
-    map_seed: int | None = None
     # Timeout do recv loop das threads de conexão (evita bloqueio infinito).
     socket_timeout_seconds: float = 0.2
     # Tempo máximo de shutdown por thread (rede de segurança).

@@ -24,7 +24,12 @@ from urllib.parse import parse_qs, urlparse
 
 import msgspec
 
-from ..config import HTTP_POLL_HOLD_SECONDS, HTTP_POLL_SESSION_TIMEOUT_SECONDS
+from ..config import (
+    HTTP_POLL_HOLD_SECONDS,
+    HTTP_POLL_MAX_BODY_BYTES,
+    HTTP_POLL_MAX_SESSIONS,
+    HTTP_POLL_SESSION_TIMEOUT_SECONDS,
+)
 from ..framing import FrameDecoder, FrameError, encode_frame
 from ..protocol import Message, ProtocolError
 
@@ -168,22 +173,52 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         return self._listener().session(session_id)
 
+    def _content_length(self) -> int | None:
+        """``Content-Length`` validado; ``None`` = ausente/malformado/negativo."""
+        raw = self.headers.get("Content-Length")
+        if raw is None:
+            return 0
+        try:
+            length = int(raw)
+        except ValueError:
+            return None
+        return length if length >= 0 else None
+
+    def _reject(self, status: int, message: str) -> None:
+        """Resposta de rejeição: encerra a conexão (corpo pode ter sobrado)."""
+        self.close_connection = True
+        self._respond(status, f'{{"error":"{message}"}}'.encode())
+
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         listener = self._listener()
         if path == "/connect":
+            if not listener.can_accept_session():
+                self._reject(503, "limite de sessoes simultaneas")
+                return
             created = listener.create_session()
             self._respond(200, msgspec.json.encode(_SessionCreated(session=created.session_id)))
+            return
+        if path == "/send":
+            # Corpo validado ANTES da leitura e antes do lookup de sessão
+            # (RFC 9110: 400/413) — rejeita requisição malformada cedo.
+            length = self._content_length()
+            if length is None:
+                self._reject(400, "content-length invalido")
+                return
+            if length > HTTP_POLL_MAX_BODY_BYTES:
+                self._reject(413, "corpo excede o teto")
+                return
+            conn = self._session()
+            if conn is None:
+                self._respond(404, b'{"error":"sessao desconhecida"}')
+                return
+            conn.ingest(self.rfile.read(length))
+            self._respond(200, b"")
             return
         conn = self._session()
         if conn is None:
             self._respond(404, b'{"error":"sessao desconhecida"}')
-            return
-        if path == "/send":
-            # Corpo lido por inteiro antes de responder (keep-alive HTTP/1.1).
-            length = int(self.headers.get("Content-Length", "0"))
-            conn.ingest(self.rfile.read(length))
-            self._respond(200, b"")
             return
         if path == "/close":
             listener.drop_session(conn.session_id)
@@ -241,6 +276,11 @@ class HttpPollListener:
                 thread.join(timeout)
 
     # -------------------------------------------------------------- sessões
+
+    def can_accept_session(self) -> bool:
+        """Há vaga dentro do teto de sessões simultâneas?"""
+        with self._lock:
+            return len(self._sessions) < HTTP_POLL_MAX_SESSIONS
 
     def create_session(self) -> HttpPollClientConnection:
         """Nova sessão registrada no servidor (o join chega pelo /send)."""
