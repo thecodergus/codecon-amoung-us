@@ -3,7 +3,9 @@
 Firewalls corporativos com inspeção de conteúdo removem o ``Upgrade`` do
 ``ws://`` em claro, mas não enxergam dentro do túnel TLS: para os
 intermediários, ``wss://`` é indistinguível de HTTPS na 443
-(websocket.org/reference/wss-vs-ws). O certificado é gerado em memória a
+(websocket.org/reference/wss-vs-ws, O'Riordan, 2026 — proxies "drop the
+connection or strip the Upgrade header"; o túnel TLS é opaco). O
+certificado é gerado em memória a
 cada boot do servidor (sem admin, sem domínio) e a autenticidade vem do
 **pin**: o beacon de descoberta anuncia o fingerprint SHA-256 do cert e o
 cliente só aceita o certificado cujo fingerprint coincida. O pin é tão

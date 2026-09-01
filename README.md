@@ -81,13 +81,12 @@ filtra broadcast mas passa unicast), a busca cai automaticamente para
 **varredura unicast da sub-rede** (/24, pacing ~20 pacotes/s) — o host
 responde os probes com o mesmo anúncio.
 
-**Correção de permissões em um clique.** Se o firewall do próprio host
-bloquear a escuta (bind), a tela de criar partida oferece
-"Corrigir permissões de rede (requer admin)": no Windows cria a regra inbound
-para o executável do jogo via `netsh advfirewall` com elevação UAC (opt-in —
-só roda no clique); no Linux exibe o comando pronto
-(`sudo ufw allow <porta>/tcp && sudo ufw allow 5557/udp`). A busca vazia e os
-erros de conexão também exibem diagnóstico orientado por sistema.
+**Diagnóstico de firewall sem elevação.** O público-alvo nunca tem admin/sudo:
+a cascata de portas do host embutido (abaixo) contorna bind negado/ocupado
+sem elevação, e a busca vazia e os erros de conexão exibem diagnóstico
+orientado por sistema — dicas e comandos prontos para quem **tiver** um
+administrador disponível (ex.: `ufw allow <porta>/tcp`, `netsh advfirewall`),
+mas nada exige elevação em nenhuma etapa do jogo.
 
 **Transporte: cascata `wss` → `ws` → HTTP → TCP.** O servidor escuta TCP cru,
 WebSocket e HTTP long polling simultaneamente; o cliente tenta o melhor
@@ -155,23 +154,32 @@ Caveats honestos:
   lobby, e o host escuta em todas as interfaces (`0.0.0.0`). Use em redes
   confiáveis (LAN de evento, não Wi-Fi público aberto).
 
-### Último recurso: VPN mesh sem admin (Tailscale userspace)
+### Último recurso: VPN mesh (Tailscale) — e por que o jogo não a usa sozinho
 
 Quando a rede corporativa bloqueia tudo (isolamento de clientes,
 segmentação rígida), o jogo em si não tem contorno legítimo — o tráfego
-precisa sair pela internet. O **Tailscale** em modo userspace roda **sem
-admin** e cria uma rede virtual entre os jogadores (coordenação via
-contas gratuitas; tráfego P2P via WireGuard ou relay DERP):
+precisa sair pela internet. O Tailscale é a VPN mesh gratuita mais
+prática para isso, mas é importante saber **como** cada modo funciona
+antes de gastar tempo:
 
-- Windows: build userspace/oficial sem elevação
-  (`github.com/tailscale/tailscale/issues/2791`);
-- Linux: `tailscaled` userspace + proxy SOCKS5 local
-  (`tailscale.com/docs/concepts/userspace-networking`).
+- **Com admin** (qualquer SO): instalação padrão cria o adaptador virtual e
+  a rede `100.x.y.z` fica roteável como uma LAN comum — o campo manual de
+  IP funciona normalmente.
+- **Sem admin, Linux**: `tailscaled --tun=userspace-networking` roda sem
+  TUN (`tailscale.com/docs/concepts/userspace-networking`), mas o tailnet
+  fica acessível **só via proxy local** `--socks5-server` — não por IP
+  direto. O jogo não implementa cliente SOCKS5/HTTP-CONNECT, então este
+  modo **não funciona com o jogo como está hoje**.
+- **Sem admin, Windows**: não existe caminho oficial sem elevação — o
+  pedido é feature request aberto desde 2021
+  (`github.com/tailscale/tailscale/issues/2791`); o `tailscaled` do
+  Windows instala como serviço do sistema (`tailscale.com/docs/reference/tailscaled`).
 
-Instalação e contas são responsabilidade dos jogadores, sujeitas à política
-da empresa — **fora do escopo de suporte do jogo**. Uma vez na rede
-virtual, conecte pelo IP do Tailscale (100.x.y.z) no campo manual. O
-ZeroTier foi descartado: exige adapter de rede (admin).
+O ZeroTier foi descartado pelo mesmo motivo: exige adaptador de rede
+(admin). Instalação e contas são responsabilidade dos jogadores, sujeitas
+à política da empresa — **fora do escopo de suporte do jogo**. Se o
+suporte a proxy SOCKS5 for adicionado ao cliente no futuro, o modo
+userspace do Linux passa a ser utilizável sem admin.
 
 ## Controles (tela de jogo)
 
