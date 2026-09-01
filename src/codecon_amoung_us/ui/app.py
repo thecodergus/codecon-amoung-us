@@ -463,7 +463,7 @@ class App:
     ) -> None:
         """Worker: escuta os anúncios da LAN (bloqueante ~2,5s) e publica.
 
-        Busca vazia → sweep unicast da sub-rede (net/discovery.py): filtros
+        Busca vazia → sweep unicast da sub-rede (net/discovery.py): filtras
         de VLAN/AP derrubam broadcast e passam unicast; a varredura cobre o
         /24 com pacing (~20 pps), somando até ~15 s ao pior caso.
         """
@@ -484,7 +484,7 @@ class App:
         self._current_menu = self.menu_discover
 
     def _join_discovered(self, nickname: str, game: DiscoveredGame) -> None:
-        """Conecta a uma partida descoberta: wss (pin) → ws → TCP."""
+        """Conecta a uma partida descoberta: wss (pin) → ws → HTTP → TCP."""
         self._start_connect_worker(
             nickname=nickname,
             tcp_port=game.tcp_port,
@@ -492,6 +492,7 @@ class App:
             host=False,
             ip=game.ip,
             tls_fingerprint=game.tls_fingerprint,
+            http_port=game.http_port,
         )
 
     def _open_settings(self) -> None:
@@ -516,9 +517,17 @@ class App:
         except ValueError:
             self._show_error("Porta inválida")
             return
-        # WS (padrão ouro) na porta adjacente; a descoberta divulga ambas.
+        # WS (padrão ouro) na porta adjacente, HTTP long polling na seguinte;
+        # a descoberta divulga todas as portas efetivas.
         ws_port = port + 1 if port + 1 <= 65535 else None
-        self._start_connect_worker(nickname=nickname, tcp_port=port, ws_port=ws_port, host=True)
+        http_port = port + 2 if port + 2 <= 65535 else None
+        self._start_connect_worker(
+            nickname=nickname,
+            tcp_port=port,
+            ws_port=ws_port,
+            host=True,
+            http_port=http_port,
+        )
 
     def _join_game(self) -> None:
         nickname = str(self.join_nickname.get_value()).strip() or "player"
@@ -543,6 +552,7 @@ class App:
         host: bool,
         ip: str = "127.0.0.1",
         tls_fingerprint: str | None = None,
+        http_port: int | None = None,
     ) -> None:
         """Inicia a conexão em thread; a UI continua renderizando."""
         self.connection_state = ConnectionState.CONNECTING
@@ -562,6 +572,7 @@ class App:
                 ws_port,
                 host,
                 tls_fingerprint,
+                http_port,
                 self._connection_queue,
                 self._connection_cancel,
             ),
@@ -578,6 +589,7 @@ class App:
         ws_port: int | None,
         host: bool,
         tls_fingerprint: str | None,
+        http_port: int | None,
         attempt_queue: queue.SimpleQueue[object],
         cancel: threading.Event,
     ) -> None:
@@ -596,10 +608,11 @@ class App:
                 # descoberta anuncia a porta efetiva, então bind negado/ocupado
                 # não derruba a criação da partida. O cliente local conecta em
                 # 127.0.0.1 na porta efetiva.
-                server = start_host_server(tcp_port, ws_port)
+                server = start_host_server(tcp_port, ws_port, http_port)
                 tcp_port = server.port
                 ws_port = server.ws_port  # efetivo (None se o fallback desligou o WS)
                 tls_fingerprint = server.tls_fingerprint  # None = ws puro (sem TLS)
+                http_port = server.http_port  # efetivo (None se o fallback desligou o HTTP)
                 ip = "127.0.0.1"
                 if cancel.is_set():
                     server.stop()
@@ -611,6 +624,7 @@ class App:
                 nickname=nickname,
                 timeout=5.0,
                 tls_fingerprint=tls_fingerprint,
+                http_port=http_port,
             )
             if cancel.is_set():
                 client.close()

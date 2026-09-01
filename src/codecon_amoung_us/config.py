@@ -29,6 +29,11 @@ MAX_DISCOVERY_BYTES: int = 512
 DISCOVERY_PROBE_MAGIC: str = "codecon-amoung-us/1-probe"
 DISCOVERY_SWEEP_PPS: int = 20
 
+# Transporte HTTP long polling (net/http_poll.py): espera do long poll no
+# servidor e expiração de sessão por inatividade.
+HTTP_POLL_HOLD_SECONDS: float = 25.0
+HTTP_POLL_SESSION_TIMEOUT_SECONDS: float = 60.0
+
 # Raios de interação (px) — fonte única para servidor e UI.
 KILL_RADIUS: float = 40.0
 REPORT_RADIUS: float = 50.0
@@ -125,6 +130,9 @@ class GameConfig:
     # Porta do listener WebSocket (transporte alternativo para atravessar
     # firewalls corporativos); None desliga o listener (ver net/ws.py).
     ws_port: int | None = None
+    # Porta do listener HTTP long polling (transporte de último degrau para
+    # proxies com inspeção — ver net/http_poll.py); None desliga o listener.
+    http_port: int | None = None
 
     def resolve_map_path(self) -> Path:
         """Retorna o mapa configurado ou o padrão do projeto."""

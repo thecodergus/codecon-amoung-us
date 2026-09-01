@@ -60,6 +60,7 @@ from ..protocol import (
     WorldSnapshot,
 )
 from .discovery import DiscoveryBeacon, DiscoveryResponder, GameAnnouncement
+from .http_poll import HttpPollClientConnection, HttpPollListener
 from .dispatch import dispatch_ejection
 from .tls import TlsMaterial, generate_server_tls
 from .ws import WSClientConnection, WSListener
@@ -145,7 +146,7 @@ class ClientConnection:
 
 # Uma conexão de cliente, por qualquer transporte (TCP cru ou WebSocket).
 # O game loop e o despacho só dependem desta interface pública comum.
-Connection = ClientConnection | WSClientConnection
+Connection = ClientConnection | WSClientConnection | HttpPollClientConnection
 
 
 class GameServer:
@@ -200,6 +201,7 @@ class GameServer:
         self._ws_listener: WSListener | None = None
         self._tls: TlsMaterial | None = None
         self._responder: DiscoveryResponder | None = None
+        self._http_listener: HttpPollListener | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -255,6 +257,11 @@ class GameServer:
         """Fingerprint do cert TLS quando o listener WS está em wss (None = ws puro)."""
         return self._tls.fingerprint if self._tls is not None else None
 
+    @property
+    def http_port(self) -> int | None:
+        """Porta efetiva do listener HTTP long polling (None quando desligado)."""
+        return self._http_listener.port if self._http_listener is not None else None
+
     def start(self) -> None:
         """Inicia listener e game loop (idempotente)."""
         if self._listener is not None:
@@ -290,6 +297,11 @@ class GameServer:
             # broadcast do beacon é filtrado pela rede.
             self._responder = DiscoveryResponder(self._make_announcement)
             self._responder.start()
+        if self.config.http_port is not None:
+            # HTTP long polling (net/http_poll.py): transporte de último
+            # degrau — proxies com inspeção que removem o Upgrade do WS.
+            self._http_listener = HttpPollListener(self, self.host, self.config.http_port)
+            self._http_listener.start()
 
     def _make_announcement(self) -> GameAnnouncement | None:
         """Anúncio da partida para o beacon de descoberta (None fora do lobby)."""
@@ -306,6 +318,7 @@ class GameServer:
                 tcp_port=self.port,
                 ws_port=self.config.ws_port,
                 tls_fingerprint=self.tls_fingerprint,
+                http_port=self.http_port,
             )
 
     def stop(self) -> None:
@@ -320,6 +333,9 @@ class GameServer:
         if self._responder is not None:
             self._responder.stop()
             self._responder = None
+        if self._http_listener is not None:
+            self._http_listener.stop(self.config.shutdown_join_timeout_seconds)
+            self._http_listener = None
         if self._listener is not None:
             with contextlib.suppress(OSError):
                 self._listener.close()
@@ -1104,17 +1120,20 @@ def _server_config(args: argparse.Namespace) -> GameConfig:
     return config
 
 
-def start_host_server(tcp_port: int, ws_port: int | None) -> GameServer:
+def start_host_server(
+    tcp_port: int, ws_port: int | None, http_port: int | None = None
+) -> GameServer:
     """Sobe o servidor embutido do host com cascata de portas (sem admin).
 
     Restrição do público-alvo: usuários nunca têm admin/sudo — falha de bind
     não pode ser "corrigida" por elevação. Como a descoberta LAN anuncia a
     porta real, a porta pedida é prescindível:
 
-    1. ``(tcp_port, ws_port)`` — escolha do usuário;
-    2. ``(tcp_port, sem WS)`` — porta WS adjacente ocupada/bloqueada;
-    3. ``(efêmera, sem WS)`` — porta do usuário reservada/bloqueada; o
-       anúncio de descoberta divulga a porta efetiva e nada muda para os
+    1. ``(tcp_port, ws_port, http_port)`` — escolha do usuário;
+    2. ``(tcp_port, sem WS, http_port)`` — porta WS adjacente ocupada;
+    3. ``(tcp_port, sem WS, sem HTTP)`` — porta HTTP ocupada;
+    4. ``(efêmera, sem WS, sem HTTP)`` — porta do usuário reservada; o
+       anúncio de descoberta divulga as portas efetivas e nada muda para os
        clientes da lista de salas.
 
     Bind em ``0.0.0.0``: partidas em LAN (mesma rede) dependem de aceitar
@@ -1122,8 +1141,17 @@ def start_host_server(tcp_port: int, ws_port: int | None) -> GameServer:
     worker captura ``OSError``; ``OverflowError`` cobre porta > 65535).
     """
     last_error: OSError | OverflowError | None = None
-    for port, ws in ((tcp_port, ws_port), (tcp_port, None), (0, None)):
-        config = GameConfig(ws_port=ws) if ws is not None else GameConfig()
+    for port, ws, http in (
+        (tcp_port, ws_port, http_port),
+        (tcp_port, None, http_port),
+        (tcp_port, None, None),
+        (0, None, None),
+    ):
+        config = (
+            GameConfig(ws_port=ws, http_port=http)
+            if ws is not None or http is not None
+            else GameConfig()
+        )
         candidate = GameServer(host="0.0.0.0", port=port, config=config)
         try:
             candidate.start()

@@ -90,6 +90,6 @@ def test_start_host_server_raises_last_error_when_all_attempts_fail(
         raise OSError(f"falha simulada {failures}")
 
     monkeypatch.setattr(GameServer, "start", _boom)
-    with pytest.raises(OSError, match="falha simulada 3"):
+    with pytest.raises(OSError, match="falha simulada 4"):
         start_host_server(5555, None)
-    assert failures == 3  # as três tentativas da cascata
+    assert failures == 4  # as quatro tentativas da cascata (ws, http, tcp, efêmera)

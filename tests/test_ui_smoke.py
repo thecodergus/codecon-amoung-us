@@ -37,6 +37,8 @@ def test_discover_screens_render(app: App) -> None:
             max_players=10,
             tcp_port=5555,
             ws_port=5556,
+            tls_fingerprint=None,
+            http_port=None,
         )
     ]
     app._current_menu = app._build_discover_results_menu("player", games)

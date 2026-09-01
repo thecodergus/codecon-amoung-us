@@ -74,5 +74,6 @@ def test_sweep_finds_responder_on_loopback() -> None:
             tcp_port=5555,
             ws_port=5556,
             tls_fingerprint=None,
+            http_port=None,
         )
     ]

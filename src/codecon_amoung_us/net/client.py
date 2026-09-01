@@ -7,16 +7,18 @@ suíte: recv loop com timeout curto e ``wait_for`` com timeout configurável.
 from __future__ import annotations
 
 import contextlib
+import http.client
 import socket
 import threading
 import time
 from typing import Literal, TypeVar, cast
 
+import msgspec
 from websockets.exceptions import ConnectionClosed, WebSocketException
 from websockets.sync.client import ClientConnection as SyncWSConnection
 from websockets.sync.client import connect as ws_connect
 
-from ..config import PROTOCOL_VERSION
+from ..config import HTTP_POLL_HOLD_SECONDS, PROTOCOL_VERSION
 from ..framing import FrameDecoder, FrameError, encode_frame
 from ..game.model import Role
 from ..protocol import (
@@ -31,7 +33,27 @@ from .tls import client_ssl_context, fingerprint_of_der
 __all__ = ["GameClient"]
 
 _M = TypeVar("_M", bound=Message)
-Transport = Literal["", "tcp", "ws", "wss"]
+Transport = Literal["", "tcp", "ws", "wss", "http"]
+
+
+class _SessionCreated(msgspec.Struct, forbid_unknown_fields=True, kw_only=True):
+    """Resposta do ``POST /connect`` do servidor HTTP long polling."""
+
+    session: str
+
+
+def _http_session_create(host: str, port: int, timeout: float) -> str:
+    """Cria a sessão long polling no servidor; devolve o id."""
+    conn = http.client.HTTPConnection(host, port, timeout=timeout)
+    try:
+        conn.request("POST", "/connect")
+        response = conn.getresponse()
+        body = response.read()
+    finally:
+        conn.close()
+    if response.status != 200:
+        raise ConnectionError(f"POST /connect → HTTP {response.status}")
+    return msgspec.json.decode(body, type=_SessionCreated).session
 
 
 class GameClient:
@@ -46,6 +68,9 @@ class GameClient:
     def __init__(self) -> None:
         self._sock: socket.socket | None = None
         self._ws: SyncWSConnection | None = None
+        self._http: tuple[str, int, str] | None = None
+        self._http_conn: http.client.HTTPConnection | None = None
+        self._http_lock = threading.Lock()
         self._decoder = FrameDecoder()
         self._stop = threading.Event()
         self._recv_thread: threading.Thread | None = None
@@ -139,6 +164,47 @@ class GameClient:
         self.send_join(nickname)
         self.wait_for(JoinAccepted, timeout=timeout)
 
+    def connect_http_poll(self, host: str, port: int, nickname: str, timeout: float = 5.0) -> None:
+        """Conecta via HTTP long polling (último degrau) e envia JoinRequest.
+
+        Sessão criada no ``POST /connect``; downstream em ``GET /poll``
+        (long poll, o servidor segura até ~25 s) e upstream em ``POST
+        /send``. Latência maior que ws/TCP: modo compatibilidade.
+        """
+        self._reset_transport()
+        self._http = (host, port, _http_session_create(host, port, timeout))
+        self.transport = "http"
+        self._recv_thread = threading.Thread(
+            target=self._http_poll_loop, name="client-http-poll", daemon=True
+        )
+        self._recv_thread.start()
+        self.send_join(nickname)
+        self.wait_for(JoinAccepted, timeout=timeout)
+
+    def _http_poll_loop(self) -> None:
+        """Downstream long polling: ``GET /poll`` em loop até parar/sessão morrer."""
+        target = self._http
+        if target is None:
+            return
+        host, port, session = target
+        hold_timeout = HTTP_POLL_HOLD_SECONDS + 10.0
+        while not self._stop.is_set():
+            try:
+                conn = http.client.HTTPConnection(host, port, timeout=hold_timeout)
+                conn.request("GET", f"/poll?session={session}")
+                response = conn.getresponse()
+                body = response.read()
+                conn.close()
+            except (OSError, TimeoutError, http.client.HTTPException):
+                break
+            if response.status != 200:
+                break  # sessão encerrada no servidor (GC/shutdown/close)
+            if body:
+                try:
+                    self._ingest(body)
+                except FrameError:
+                    break
+
     def connect_auto(
         self,
         host: str,
@@ -148,8 +214,9 @@ class GameClient:
         nickname: str,
         timeout: float = 5.0,
         tls_fingerprint: str | None = None,
+        http_port: int | None = None,
     ) -> None:
-        """Conecta pelo melhor transporte: wss (pin) → ws → TCP cru.
+        """Conecta pelo melhor transporte: wss (pin) → ws → HTTP → TCP cru.
 
         ``tls_fingerprint`` presente (anunciado no beacon) → a porta WS está
         em wss (net/tls.py). A falha de um transporte cai para o seguinte; se
@@ -161,6 +228,8 @@ class GameClient:
                 attempts.append(("wss", ws_port, tls_fingerprint))
             else:
                 attempts.append(("ws", ws_port, None))
+        if http_port is not None:
+            attempts.append(("http", http_port, None))
         if tcp_port is not None:
             attempts.append(("tcp", tcp_port, None))
         if not attempts:
@@ -169,17 +238,21 @@ class GameClient:
         for transport, port, fingerprint in attempts:
             try:
                 if transport == "wss":
-                    # O fingerprint viaja na tupla do attempt (sempre presente
-                    # para wss) — cast local evita checagem redundante.
+                    if fingerprint is None:
+                        # Inalcançável por construção: attempt wss só é
+                        # criado com fingerprint do anúncio (acima).
+                        raise ConnectionError("wss sem fingerprint do beacon")
                     self.connect_wss(
                         host,
                         port,
                         nickname,
-                        tls_fingerprint=cast(str, fingerprint),
+                        tls_fingerprint=fingerprint,
                         timeout=timeout,
                     )
                 elif transport == "ws":
                     self.connect_ws(host, port, nickname, timeout=timeout)
+                elif transport == "http":
+                    self.connect_http_poll(host, port, nickname, timeout=timeout)
                 else:
                     self.connect(host, port, nickname, timeout=timeout)
                 return
@@ -216,6 +289,22 @@ class GameClient:
         if self._ws is not None:
             with contextlib.suppress(ConnectionClosed, OSError):
                 self._ws.close()
+        http_target = self._http
+        with self._http_lock:
+            if self._http_conn is not None:
+                with contextlib.suppress(OSError, http.client.HTTPException):
+                    self._http_conn.close()
+                self._http_conn = None
+        self._http = None
+        if http_target is not None:
+            # Best-effort: encerra a sessão no servidor imediatamente (o GC
+            # por inatividade é a rede de segurança se este POST falhar).
+            host, port, session = http_target
+            with contextlib.suppress(OSError, TimeoutError, http.client.HTTPException):
+                conn = http.client.HTTPConnection(host, port, timeout=0.5)
+                conn.request("POST", f"/close?session={session}")
+                conn.getresponse().read()
+                conn.close()
         if self._recv_thread is not None:
             self._recv_thread.join(timeout=3.0)
 
@@ -283,6 +372,10 @@ class GameClient:
 
     def send(self, message: Message) -> None:
         frame = encode_frame(message)
+        http_target = self._http
+        if http_target is not None:
+            self._http_send(http_target, frame)
+            return
         if self._ws is not None:
             # frame[:-1] remove o \n: o WS já delimita mensagens.
             self._ws.send(frame[:-1].decode())
@@ -291,6 +384,30 @@ class GameClient:
         if sock is None:
             raise ConnectionError("cliente não conectado")
         sock.sendall(frame)
+
+    def _http_send(self, target: tuple[str, int, str], frame: bytes) -> None:
+        """Upstream HTTP: ``POST /send`` com o frame (conexão reutilizada)."""
+        host, port, session = target
+        with self._http_lock:
+            try:
+                if self._http_conn is None:
+                    self._http_conn = http.client.HTTPConnection(host, port, timeout=5.0)
+                self._http_conn.request(
+                    "POST",
+                    f"/send?session={session}",
+                    body=frame,
+                    headers={"Content-Type": "application/x-ndjson"},
+                )
+                response = self._http_conn.getresponse()
+                response.read()
+            except (OSError, http.client.HTTPException) as exc:
+                if self._http_conn is not None:
+                    with contextlib.suppress(OSError, http.client.HTTPException):
+                        self._http_conn.close()
+                    self._http_conn = None
+                raise ConnectionError(f"POST /send falhou: {exc}") from exc
+        if response.status != 200:
+            raise ConnectionError(f"POST /send → HTTP {response.status}")
 
     def move(self, dx: float, dy: float) -> None:
         from ..protocol import MovementInput

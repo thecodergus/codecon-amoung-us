@@ -729,7 +729,7 @@ def test_cancel_connect_host_releases_port(app: App) -> None:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    app._connect_worker("host", "127.0.0.1", port, None, True, attempt_queue, cancel)
+    app._connect_worker("host", "127.0.0.1", port, None, True, None, None, attempt_queue, cancel)
     assert attempt_queue.empty()
     # porta liberada: um novo servidor sobe na mesma porta sem EADDRINUSE
     server = GameServer(host="127.0.0.1", port=port)
@@ -753,6 +753,8 @@ def test_cancel_after_connect_closes_client_and_publishes_nothing(
             ws_port: int | None,
             nickname: str,
             timeout: float = 5.0,
+            tls_fingerprint: str | None = None,
+            http_port: int | None = None,
         ) -> None:
             cancel.set()
 
@@ -761,7 +763,7 @@ def test_cancel_after_connect_closes_client_and_publishes_nothing(
 
     monkeypatch.setattr("codecon_amoung_us.ui.app.GameClient", StubClient)
     attempt_queue: queue.SimpleQueue[object] = queue.SimpleQueue()
-    app._connect_worker("nick", "127.0.0.1", 1, None, False, attempt_queue, cancel)
+    app._connect_worker("nick", "127.0.0.1", 1, None, False, None, None, attempt_queue, cancel)
     assert closed == [True]
     assert attempt_queue.empty()
 
@@ -916,7 +918,7 @@ def test_settings_screen_opens_from_main_menu(app: App) -> None:
 
 
 def test_join_discovered_connects_via_websocket(app: App) -> None:
-    """Selecionar uma partida descoberta conecta sem digitar IP, via WS."""
+    """Selecionar uma partida descoberta conecta sem digitar IP, via wss (pin)."""
     import time as _time
 
     from codecon_amoung_us.config import GameConfig
@@ -928,13 +930,17 @@ def test_join_discovered_connects_via_websocket(app: App) -> None:
     server = GameServer(host="127.0.0.1", port=0, config=GameConfig(ws_port=ws_port))
     server.start()
     try:
+        # O anúncio real carrega o fingerprint TLS do host: o cliente usa
+        # wss com pin; ws puro só sem fingerprint (host antigo sem TLS).
         game = DiscoveredGame(
             ip="127.0.0.1",
             host_name="dono",
             players=1,
             max_players=10,
             tcp_port=server.port,
-            ws_port=ws_port,
+            ws_port=server.ws_port,
+            tls_fingerprint=server.tls_fingerprint,
+            http_port=None,
         )
         app._join_discovered("player", game)
         deadline = _time.monotonic() + 8.0
@@ -943,7 +949,7 @@ def test_join_discovered_connects_via_websocket(app: App) -> None:
             _time.sleep(0.01)
         assert app.connection_state is ConnectionState.CONNECTED
         assert app.client is not None
-        assert app.client.transport == "ws"
+        assert app.client.transport == "wss"
         assert app.screen_name == "lobby"
     finally:
         app._shutdown_connection()
