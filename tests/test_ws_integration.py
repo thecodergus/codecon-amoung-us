@@ -26,6 +26,17 @@ from codecon_amoung_us.protocol import (
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def plain_ws(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Desativa o TLS self-signed (padrão do host desde a Etapa wss).
+
+    Estes testes cobrem o transporte ``ws://`` puro — caminho efetivo quando
+    a geração do cert falha no host (fallback documentado). A cobertura wss
+    com pin fica em ``tests/test_tls.py``.
+    """
+    monkeypatch.setattr("codecon_amoung_us.net.server.generate_server_tls", lambda: None)
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
