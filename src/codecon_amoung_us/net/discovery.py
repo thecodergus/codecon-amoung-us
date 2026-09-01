@@ -101,6 +101,9 @@ class GameAnnouncement(msgspec.Struct, forbid_unknown_fields=True, kw_only=True)
     max_players: int
     tcp_port: int
     ws_port: int | None = None
+    # Fingerprint SHA-256 (hex) do cert TLS do host quando o listener WS está
+    # em wss (ver net/tls.py) — o cliente só aceita o cert anunciado (pin).
+    tls_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,7 @@ class DiscoveredGame:
     max_players: int
     tcp_port: int
     ws_port: int | None
+    tls_fingerprint: str | None
 
 
 def encode_announcement(announcement: GameAnnouncement) -> bytes:
@@ -243,6 +247,7 @@ def discover_games(
                 max_players=announcement.max_players,
                 tcp_port=announcement.tcp_port,
                 ws_port=announcement.ws_port,
+                tls_fingerprint=announcement.tls_fingerprint,
             )
         return sorted(games.values(), key=lambda g: (g.host_name, g.ip, g.tcp_port))
     finally:

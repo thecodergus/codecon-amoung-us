@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import socket
+import ssl
 import threading
 from typing import TYPE_CHECKING
 
@@ -98,7 +99,15 @@ class WSListener:
     ``WSClientConnection`` registrada no ``GameServer``.
     """
 
-    def __init__(self, server: GameServer, host: str, port: int) -> None:
+    def __init__(
+        self,
+        server: GameServer,
+        host: str,
+        port: int,
+        *,
+        ssl_context: ssl.SSLContext | None = None,
+    ) -> None:
+        """``ssl_context`` presente → a porta serve **apenas wss** (net/tls.py)."""
         self._server = server
         # Socket próprio (e não o interno do serve) para introspecção da
         # porta efêmera em testes: bind/listen antes de passar ao servidor WS.
@@ -107,7 +116,7 @@ class WSListener:
         listener.bind((host, port))
         listener.listen()
         self.port: int = int(listener.getsockname()[1])
-        self._ws_server: Server = serve(self._handle, sock=listener)
+        self._ws_server: Server = serve(self._handle, sock=listener, ssl=ssl_context)
         self._thread = threading.Thread(
             target=self._ws_server.serve_forever, name="ws-listener", daemon=True
         )

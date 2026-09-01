@@ -61,6 +61,7 @@ from ..protocol import (
 )
 from .discovery import DiscoveryBeacon, GameAnnouncement
 from .dispatch import dispatch_ejection
+from .tls import TlsMaterial, generate_server_tls
 from .ws import WSClientConnection, WSListener
 
 __all__ = ["GameServer", "start_host_server", "main"]
@@ -197,6 +198,7 @@ class GameServer:
         self._game_thread: threading.Thread | None = None
         self._beacon: DiscoveryBeacon | None = None
         self._ws_listener: WSListener | None = None
+        self._tls: TlsMaterial | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -247,6 +249,11 @@ class GameServer:
         """Porta efetiva do listener WebSocket (None quando desligado)."""
         return self._ws_listener.port if self._ws_listener is not None else None
 
+    @property
+    def tls_fingerprint(self) -> str | None:
+        """Fingerprint do cert TLS quando o listener WS está em wss (None = ws puro)."""
+        return self._tls.fingerprint if self._tls is not None else None
+
     def start(self) -> None:
         """Inicia listener e game loop (idempotente)."""
         if self._listener is not None:
@@ -266,7 +273,15 @@ class GameServer:
         self._listener_thread.start()
         self._game_thread.start()
         if self.config.ws_port is not None:
-            self._ws_listener = WSListener(self, self.host, self.config.ws_port)
+            # TLS self-signed em memória (net/tls.py): None = degrada para ws
+            # puro sem derrubar o host — o anúncio não leva fingerprint.
+            self._tls = generate_server_tls()
+            self._ws_listener = WSListener(
+                self,
+                self.host,
+                self.config.ws_port,
+                ssl_context=self._tls.context if self._tls is not None else None,
+            )
         if self.config.announce:
             self._beacon = DiscoveryBeacon(self._make_announcement)
             self._beacon.start()
@@ -285,6 +300,7 @@ class GameServer:
                 max_players=self.config.max_players,
                 tcp_port=self.port,
                 ws_port=self.config.ws_port,
+                tls_fingerprint=self.tls_fingerprint,
             )
 
     def stop(self) -> None:

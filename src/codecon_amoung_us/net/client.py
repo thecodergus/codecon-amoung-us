@@ -26,11 +26,12 @@ from ..protocol import (
     TaskState,
     WorldSnapshot,
 )
+from .tls import client_ssl_context, fingerprint_of_der
 
 __all__ = ["GameClient"]
 
 _M = TypeVar("_M", bound=Message)
-Transport = Literal["", "tcp", "ws"]
+Transport = Literal["", "tcp", "ws", "wss"]
 
 
 class GameClient:
@@ -90,6 +91,54 @@ class GameClient:
         self.send_join(nickname)
         self.wait_for(JoinAccepted, timeout=timeout)
 
+    def connect_wss(
+        self,
+        host: str,
+        port: int,
+        nickname: str,
+        *,
+        tls_fingerprint: str,
+        timeout: float = 5.0,
+    ) -> None:
+        """Conecta via WebSocket sobre TLS self-signed (pin) e envia JoinRequest.
+
+        O handshake TLS é feito aqui (e não pelo websockets) para validar o
+        pin ANTES do handshake WS: o certificado apresentado precisa ter o
+        fingerprint anunciado no beacon (``net/tls.py``); divergência aborta
+        sem enviar nada.
+        """
+        self._reset_transport()
+        context = client_ssl_context()
+        raw = socket.create_connection((host, port), timeout=timeout)
+        try:
+            tls_sock = context.wrap_socket(raw, server_hostname=host)
+        except OSError:
+            raw.close()
+            raise
+        der = tls_sock.getpeercert(binary_form=True)
+        if der is None or fingerprint_of_der(der) != tls_fingerprint:
+            tls_sock.close()
+            raise ConnectionError(f"fingerprint TLS divergente para {host}:{port}")
+        try:
+            # Socket já cifrado: o handshake WS corre como ws:// sobre o
+            # transporte TLS pronto (websockets não toca no socket fornecido).
+            self._ws = ws_connect(
+                f"ws://{host}:{port}/",
+                sock=tls_sock,
+                open_timeout=timeout,
+                legacy=True,
+            )
+        except BaseException:
+            tls_sock.close()
+            raise
+        self.transport = "wss"
+        self._recv_thread = threading.Thread(
+            target=self._ws_recv_loop, name="client-wss-recv", daemon=True
+        )
+        self._recv_thread.start()
+        self.send_join(nickname)
+        self.wait_for(JoinAccepted, timeout=timeout)
+
     def connect_auto(
         self,
         host: str,
@@ -98,23 +147,38 @@ class GameClient:
         ws_port: int | None,
         nickname: str,
         timeout: float = 5.0,
+        tls_fingerprint: str | None = None,
     ) -> None:
-        """Conecta pelo melhor transporte: WebSocket (padrão ouro), TCP como fallback.
+        """Conecta pelo melhor transporte: wss (pin) → ws → TCP cru.
 
-        A falha de um transporte cai para o seguinte; se todos falharem,
-        propaga ``ConnectionError`` encadeada à última falha.
+        ``tls_fingerprint`` presente (anunciado no beacon) → a porta WS está
+        em wss (net/tls.py). A falha de um transporte cai para o seguinte; se
+        todos falharem, propaga ``ConnectionError`` encadeada à última falha.
         """
-        attempts: list[tuple[Transport, int]] = []
+        attempts: list[tuple[Transport, int, str | None]] = []
         if ws_port is not None:
-            attempts.append(("ws", ws_port))
+            if tls_fingerprint is not None:
+                attempts.append(("wss", ws_port, tls_fingerprint))
+            else:
+                attempts.append(("ws", ws_port, None))
         if tcp_port is not None:
-            attempts.append(("tcp", tcp_port))
+            attempts.append(("tcp", tcp_port, None))
         if not attempts:
             raise ValueError("connect_auto exige ao menos uma porta (tcp_port ou ws_port)")
         last_error: Exception | None = None
-        for transport, port in attempts:
+        for transport, port, fingerprint in attempts:
             try:
-                if transport == "ws":
+                if transport == "wss":
+                    # O fingerprint viaja na tupla do attempt (sempre presente
+                    # para wss) — cast local evita checagem redundante.
+                    self.connect_wss(
+                        host,
+                        port,
+                        nickname,
+                        tls_fingerprint=cast(str, fingerprint),
+                        timeout=timeout,
+                    )
+                elif transport == "ws":
                     self.connect_ws(host, port, nickname, timeout=timeout)
                 else:
                     self.connect(host, port, nickname, timeout=timeout)
@@ -123,7 +187,7 @@ class GameClient:
                 last_error = exc
         raise ConnectionError(
             f"falha em todos os transportes para {host} "
-            f"({', '.join(f'{t}:{p}' for t, p in attempts)})"
+            f"({', '.join(f'{t}:{p}' for t, p, _f in attempts)})"
         ) from last_error
 
     def _reset_transport(self) -> None:

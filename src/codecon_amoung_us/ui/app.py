@@ -476,13 +476,14 @@ class App:
         self._current_menu = self.menu_discover
 
     def _join_discovered(self, nickname: str, game: DiscoveredGame) -> None:
-        """Conecta a uma partida descoberta: WS (padrão ouro), TCP fallback."""
+        """Conecta a uma partida descoberta: wss (pin) → ws → TCP."""
         self._start_connect_worker(
             nickname=nickname,
             tcp_port=game.tcp_port,
             ws_port=game.ws_port,
             host=False,
             ip=game.ip,
+            tls_fingerprint=game.tls_fingerprint,
         )
 
     def _open_settings(self) -> None:
@@ -533,6 +534,7 @@ class App:
         ws_port: int | None,
         host: bool,
         ip: str = "127.0.0.1",
+        tls_fingerprint: str | None = None,
     ) -> None:
         """Inicia a conexão em thread; a UI continua renderizando."""
         self.connection_state = ConnectionState.CONNECTING
@@ -551,6 +553,7 @@ class App:
                 tcp_port,
                 ws_port,
                 host,
+                tls_fingerprint,
                 self._connection_queue,
                 self._connection_cancel,
             ),
@@ -566,6 +569,7 @@ class App:
         tcp_port: int,
         ws_port: int | None,
         host: bool,
+        tls_fingerprint: str | None,
         attempt_queue: queue.SimpleQueue[object],
         cancel: threading.Event,
     ) -> None:
@@ -587,12 +591,18 @@ class App:
                 server = start_host_server(tcp_port, ws_port)
                 tcp_port = server.port
                 ws_port = server.ws_port  # efetivo (None se o fallback desligou o WS)
+                tls_fingerprint = server.tls_fingerprint  # None = ws puro (sem TLS)
                 ip = "127.0.0.1"
                 if cancel.is_set():
                     server.stop()
                     return
             client.connect_auto(
-                ip, tcp_port=tcp_port, ws_port=ws_port, nickname=nickname, timeout=5.0
+                ip,
+                tcp_port=tcp_port,
+                ws_port=ws_port,
+                nickname=nickname,
+                timeout=5.0,
+                tls_fingerprint=tls_fingerprint,
             )
             if cancel.is_set():
                 client.close()
