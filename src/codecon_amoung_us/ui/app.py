@@ -29,7 +29,7 @@ from ..map.loader import load_map
 from ..map.model import GameMap
 from ..map.scene import render_scene
 from ..net.client import GameClient
-from ..net.discovery import DiscoveredGame, discover_games
+from ..net.discovery import DiscoveredGame, discover_games, sweep_games
 from ..net.firewall_hints import discovery_empty_tips, hint_for_bind_error
 from ..net.server import GameServer, start_host_server
 from ..protocol import (
@@ -461,8 +461,16 @@ class App:
     def _discovery_worker(
         nickname: str, result_queue: queue.SimpleQueue[tuple[str, list[DiscoveredGame]]]
     ) -> None:
-        """Worker: escuta os anúncios da LAN (bloqueante ~2,5s) e publica."""
-        result_queue.put((nickname, discover_games()))
+        """Worker: escuta os anúncios da LAN (bloqueante ~2,5s) e publica.
+
+        Busca vazia → sweep unicast da sub-rede (net/discovery.py): filtros
+        de VLAN/AP derrubam broadcast e passam unicast; a varredura cobre o
+        /24 com pacing (~20 pps), somando até ~15 s ao pior caso.
+        """
+        games = discover_games()
+        if not games:
+            games = sweep_games()
+        result_queue.put((nickname, games))
 
     def _poll_discovery(self) -> None:
         """Consome o resultado da busca na thread gráfica (main loop)."""

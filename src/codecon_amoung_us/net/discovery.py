@@ -31,6 +31,8 @@ from ..config import (
     DISCOVERY_LISTEN_SECONDS,
     DISCOVERY_MAGIC,
     DISCOVERY_PORT,
+    DISCOVERY_PROBE_MAGIC,
+    DISCOVERY_SWEEP_PPS,
     MAX_DISCOVERY_BYTES,
     PROTOCOL_VERSION,
 )
@@ -39,10 +41,14 @@ __all__ = [
     "GameAnnouncement",
     "DiscoveredGame",
     "DiscoveryBeacon",
+    "DiscoveryProbe",
+    "DiscoveryResponder",
     "encode_announcement",
     "decode_announcement",
     "discover_games",
+    "sweep_games",
     "local_broadcast_addresses",
+    "local_unicast_targets",
 ]
 
 _BROADCAST_ADDR = "255.255.255.255"
@@ -249,6 +255,185 @@ def discover_games(
                 ws_port=announcement.ws_port,
                 tls_fingerprint=announcement.tls_fingerprint,
             )
+        return sorted(games.values(), key=lambda g: (g.host_name, g.ip, g.tcp_port))
+    finally:
+        sock.close()
+
+
+class DiscoveryProbe(msgspec.Struct, forbid_unknown_fields=True, kw_only=True):
+    """Pedido de anúncio do sweep unicast (o host responde com ``GameAnnouncement``)."""
+
+    magic: str
+    protocol_version: int
+
+
+def encode_probe(probe: DiscoveryProbe) -> bytes:
+    """Serializa o probe como JSON (um datagrama)."""
+    return msgspec.json.encode(probe)
+
+
+def decode_probe(data: bytes) -> DiscoveryProbe | None:
+    """Decodifica um probe; ``None`` para conteúdo inválido ou alheio."""
+    if not data or len(data) > MAX_DISCOVERY_BYTES:
+        return None
+    try:
+        probe = msgspec.json.decode(data, type=DiscoveryProbe)
+    except msgspec.DecodeError:
+        return None
+    if probe.magic != DISCOVERY_PROBE_MAGIC:
+        return None
+    if probe.protocol_version != PROTOCOL_VERSION:
+        return None
+    return probe
+
+
+def local_unicast_targets() -> list[str]:
+    """Todos os IPs unicast candidatos da sub-rede local (/24 assumido).
+
+    Broadcast é filtrado entre/por VLANs em redes corporativas, mas unicast
+    intra-subnet normalmente passa (docs Cisco/Aruba): o sweep tenta cada
+    endereço individualmente. Sub-redes maiores que /24 são truncadas (o
+    custo cresce linearmente; /24 cobre as LANs de evento/domésticas).
+    """
+    local_ip = _local_ip()
+    if local_ip is None:
+        return []
+    octets = local_ip.split(".")
+    if len(octets) != 4:
+        return []
+    try:
+        values = [int(octet) for octet in octets]
+    except ValueError:
+        return []
+    if any(value < 0 or value > 255 for value in values):
+        return []
+    prefix = f"{values[0]}.{values[1]}.{values[2]}"
+    return [f"{prefix}.{host}" for host in range(1, 255)]
+
+
+class DiscoveryResponder:
+    """Responde probes unicast do sweep com o anúncio corrente do host.
+
+    O beacon é unidirecional (host → todos); o sweep inverte o fluxo
+    (cliente → host). Um único socket em ``0.0.0.0:porta`` recebe broadcast
+    e unicast; datagramas que não são probes são ignorados.
+    """
+
+    def __init__(
+        self,
+        make_announcement: Callable[[], GameAnnouncement | None],
+        *,
+        port: int = DISCOVERY_PORT,
+    ) -> None:
+        self._make_announcement = make_announcement
+        self._port = port
+        self._stop = threading.Event()
+        self._sock: socket.socket | None = None
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Inicia a thread de resposta (idempotente)."""
+        if self._thread is not None:
+            return
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        with contextlib.suppress(OSError, AttributeError):
+            # SO_REUSEPORT não existe no Windows; onde existe, o socket do
+            # responder e o listener passivo do cliente local convivem.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.bind(("", self._port))
+        sock.settimeout(0.1)
+        self._sock = sock
+        self._thread = threading.Thread(target=self._run, name="discovery-responder", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Encerra a thread e fecha o socket (idempotente)."""
+        self._stop.set()
+        if self._sock is not None:
+            with contextlib.suppress(OSError):
+                self._sock.close()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+
+    def _run(self) -> None:
+        sock = self._sock
+        if sock is None:
+            return
+        while not self._stop.is_set():
+            try:
+                data, addr = sock.recvfrom(MAX_DISCOVERY_BYTES)
+            except TimeoutError:
+                continue
+            except OSError:
+                break  # socket fechado no stop
+            if decode_probe(data) is None:
+                continue
+            announcement = self._make_announcement()
+            if announcement is None:
+                continue
+            with contextlib.suppress(OSError):
+                sock.sendto(encode_announcement(announcement), addr)
+
+
+def sweep_games(
+    timeout: float | None = None,
+    *,
+    port: int = DISCOVERY_PORT,
+    targets: list[str] | None = None,
+) -> list[DiscoveredGame]:
+    """Varre a sub-rede com probes unicast e retorna as partidas únicas.
+
+    Fallback da descoberta por broadcast: filtros de VLAN/AP derrubam
+    broadcast e passam unicast intra-subnet. Pacing de ~``PPS`` pacotes/s —
+    a varredura não deve parecer scan para IDS corporativos. Bloqueante
+    (``timeout=None`` = orçamento automático: sub-rede inteira + dreno) —
+    chamar fora da thread gráfica. ``targets`` sobrescreve a sub-rede
+    derivada (testes).
+    """
+    if targets is None:
+        targets = local_unicast_targets()
+    if timeout is None:
+        timeout = len(targets) / DISCOVERY_SWEEP_PPS + 0.5 if targets else 0.0
+    probe = encode_probe(
+        DiscoveryProbe(magic=DISCOVERY_PROBE_MAGIC, protocol_version=PROTOCOL_VERSION)
+    )
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(("", 0))  # porta efêmera: as respostas voltam direto
+        sock.settimeout(0.05)
+        games: dict[tuple[str, int], DiscoveredGame] = {}
+
+        def _collect_once() -> None:
+            try:
+                data, (ip, _src_port) = sock.recvfrom(MAX_DISCOVERY_BYTES)
+            except (TimeoutError, OSError):
+                return
+            announcement = decode_announcement(data)
+            if announcement is None:
+                return
+            games[(ip, announcement.tcp_port)] = DiscoveredGame(
+                ip=ip,
+                host_name=announcement.host_name,
+                players=announcement.players,
+                max_players=announcement.max_players,
+                tcp_port=announcement.tcp_port,
+                ws_port=announcement.ws_port,
+                tls_fingerprint=announcement.tls_fingerprint,
+            )
+
+        deadline = time.monotonic() + timeout
+        for target in targets:
+            if time.monotonic() >= deadline:
+                break
+            with contextlib.suppress(OSError):
+                sock.sendto(probe, (target, port))
+            # Um recv por envio dá o pacing (~1/0,05 s = 20 pps) e colhe
+            # respostas conforme chegam (resposta de rede local é imediata).
+            _collect_once()
+        while time.monotonic() < deadline:
+            _collect_once()
         return sorted(games.values(), key=lambda g: (g.host_name, g.ip, g.tcp_port))
     finally:
         sock.close()

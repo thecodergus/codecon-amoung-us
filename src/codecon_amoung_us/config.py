@@ -25,6 +25,9 @@ DISCOVERY_MAGIC: str = "codecon-amoung-us/1"
 DISCOVERY_BEACON_INTERVAL_SECONDS: float = 1.0
 DISCOVERY_LISTEN_SECONDS: float = 2.5
 MAX_DISCOVERY_BYTES: int = 512
+# Sweep unicast (fallback do broadcast): probe request/response e pacing.
+DISCOVERY_PROBE_MAGIC: str = "codecon-amoung-us/1-probe"
+DISCOVERY_SWEEP_PPS: int = 20
 
 # Raios de interação (px) — fonte única para servidor e UI.
 KILL_RADIUS: float = 40.0

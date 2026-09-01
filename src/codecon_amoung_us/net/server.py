@@ -59,7 +59,7 @@ from ..protocol import (
     VoteRequest,
     WorldSnapshot,
 )
-from .discovery import DiscoveryBeacon, GameAnnouncement
+from .discovery import DiscoveryBeacon, DiscoveryResponder, GameAnnouncement
 from .dispatch import dispatch_ejection
 from .tls import TlsMaterial, generate_server_tls
 from .ws import WSClientConnection, WSListener
@@ -199,6 +199,7 @@ class GameServer:
         self._beacon: DiscoveryBeacon | None = None
         self._ws_listener: WSListener | None = None
         self._tls: TlsMaterial | None = None
+        self._responder: DiscoveryResponder | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -285,6 +286,10 @@ class GameServer:
         if self.config.announce:
             self._beacon = DiscoveryBeacon(self._make_announcement)
             self._beacon.start()
+            # Sweep unicast (net/discovery.py): responde probes quando o
+            # broadcast do beacon é filtrado pela rede.
+            self._responder = DiscoveryResponder(self._make_announcement)
+            self._responder.start()
 
     def _make_announcement(self) -> GameAnnouncement | None:
         """Anúncio da partida para o beacon de descoberta (None fora do lobby)."""
@@ -312,6 +317,9 @@ class GameServer:
         if self._beacon is not None:
             self._beacon.stop()
             self._beacon = None
+        if self._responder is not None:
+            self._responder.stop()
+            self._responder = None
         if self._listener is not None:
             with contextlib.suppress(OSError):
                 self._listener.close()
